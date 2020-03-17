@@ -9,6 +9,9 @@
 
     <dependency id="es6-promise-plugin" url="https://github.com/vstirbu/PromisesPlugin.git" />
 
+    <hook type="after_plugin_install" src="scripts/after-plugin-install.js" />
+    <hook type="after_prepare" src="scripts/after-plugin-install.js" />
+
     <!-- JS modules for use by the plugin (browser env) -->
     <js-module src="www/service_worker_container.js" name="ServiceWorkerContainer">
         <clobbers target="navigator.serviceWorker" />
@@ -24,12 +27,14 @@
     </js-module>
 
     <!-- Assets for use by the worker (worker env) -->
+    <!-- These should be listed AS-IS in load_sw_assets.js -->
     <asset src="www/sw_assets/client.js" target="sw_assets/client.js" />
     <asset src="www/sw_assets/event.js" target="sw_assets/event.js" />
     <asset src="www/sw_assets/fetch.js" target="sw_assets/fetch.js" />
     <asset src="www/sw_assets/cache.js" target="sw_assets/cache.js" />
     <asset src="www/sw_assets/kamino.js" target="sw_assets/kamino.js" />
     <asset src="www/sw_assets/message.js" target="sw_assets/message.js" />
+    <asset src="www/sw_assets/import-scripts.js" target="sw_assets/import-scripts.js" />
 
     <platform name="ios">
         <config-file target="config.xml" parent="/*">

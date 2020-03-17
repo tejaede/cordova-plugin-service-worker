@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="test" version="0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <preference name="serviceworker" value="sw.js" />
+    <preference name="minperiod" value="1500" />
+    <preference name="syncpushback" value="3000" />
+    <preference name="CacheCordovaAssets" value="false" />
+    <name>ServiceWorkerCordova</name>
+    <description>
+        A sample Apache Cordova application that responds to the deviceready event.
+    </description>
+    <author email="dev@cordova.apache.org" href="http://cordova.io">
+        Apache Cordova Team
+    </author>
+    <content src="index.html" />
+    <access origin="*" />
+    <allow-navigation href="*" />
+    <plugin name="cordova-plugin-service-worker" spec="https://github.com/MobileChromeApps/cordova-plugin-service-worker" />
+    <plugin name="cordova-plugin-service-worker-background-sync" spec="^1.0.1" />
+</widget>

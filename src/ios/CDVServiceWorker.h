@@ -34,12 +34,14 @@ extern NSString * const REGISTRATION_KEY_INSTALLING;
 extern NSString * const REGISTRATION_KEY_REGISTERING_SCRIPT_URL;
 extern NSString * const REGISTRATION_KEY_SCOPE;
 extern NSString * const REGISTRATION_KEY_WAITING;
+extern NSString * const REMOTE_APPLICATION_URL;
 
 extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 
 @interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
 
 + (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request;
+- (void)markRequestComplete:(NSURLRequest *)request delegateTo:(NSURLProtocol *)protocol;
 - (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(NSURLProtocol *)protocol;
 
 @property (nonatomic, retain) JSContext *context;
@@ -49,6 +51,7 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 @property (nonatomic, retain) NSDictionary *registration;
 @property (nonatomic, retain) NSString *serviceWorkerScriptFilename;
 @property (nonatomic, retain) ServiceWorkerCacheApi *cacheApi;
+@property (nonatomic, retain) NSMutableSet *serviceWorkerAssets;
 
 @end
 

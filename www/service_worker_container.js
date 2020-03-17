@@ -1,25 +1,64 @@
-var exec = require('cordova/exec');
+var exec = require('cordova/exec'),
+    deviceReadyPromise = new Promise(function (resolve, reject) {
+        document.addEventListener('deviceready', resolve, false);
+    });
 
 var ServiceWorkerContainer = {
     //The ready promise is resolved when there is an active Service Worker with registration and the device is ready
-    ready: new Promise(function(resolve, reject) {
-	var innerResolve = function(result) {
-	    var onDeviceReady = function() {
-		resolve(new ServiceWorkerRegistration(result.installing, result.waiting, new ServiceWorker(), result.registeringScriptUrl, result.scope));
-	    }
-	    document.addEventListener('deviceready', onDeviceReady, false); 
-	}
-	exec(innerResolve, null, "ServiceWorker", "serviceWorkerReady", []);
-    }),
-    register: function(scriptURL, options) {
-        console.log("Registering " + scriptURL);
-        return new Promise(function(resolve, reject) {
-            var innerResolve = function(result) {
-		resolve(new ServiceWorkerRegistration(result.installing, result.waiting, new ServiceWorker(), result.registeringScriptUrl, result.scope));		
-            }
-            exec(innerResolve, reject, "ServiceWorker", "register", [scriptURL, options]);
+    register: function (scriptURL, options) {
+        var successCallback = this._makeRegistration.bind(this),
+            failureCallback = this._rejectRegistrationPromise,
+            absoluteScriptURL = this._resolveURL(scriptURL);
+
+        deviceReadyPromise.then(function () {
+            exec(successCallback, failureCallback, "ServiceWorker", "register", [scriptURL, options, absoluteScriptURL]);
         });
+        return this._registrationPromise;
+    },
+    _makeRegistration: function (nativeRegisterResult) {
+        var registration = new ServiceWorkerRegistration(nativeRegisterResult.installing, nativeRegisterResult.waiting, new ServiceWorker(), nativeRegisterResult.registeringScriptUrl, nativeRegisterResult.scope);
+        this._resolveRegistrationPromise(registration);
+    },
+    _resolveURL: function (url) {
+        var anchor = document.createElement("a");
+        anchor.setAttribute("href", url);
+        return anchor.href;
+    },
+    addEventListener: function (type, handler, bubble) {
+        //Event Target will be window instead of serviceWorker
+        window.addEventListener(type, handler, bubble);
     }
 };
+Object.defineProperties(ServiceWorkerContainer, {
+    ready: {
+        get: function () {
+            var self = this;
+            if (!this._readyPromise) {
+                this._readyPromise = new Promise(function (resolve, reject) {
+                    self._registrationPromise.then(function (registration) {
+                        var callback = function () {
+                            resolve(registration);
+                        };
+                        exec(callback, null, "ServiceWorker", "serviceWorkerReady", []);
+                    });
+                });
+            }
+            return this._readyPromise;
+        }
+    },
+    _registrationPromise: {
+        get: function () {
+            var self = this;
+            if (!this.__registrationPromise) {
+                this.__registrationPromise = new Promise(function (resolve, reject) {
+                    self._rejectRegistrationPromise = reject;
+                    self._resolveRegistrationPromise = resolve;
+                });
+            }
+            return this.__registrationPromise;
+        }
+    }
+});
+
 
 module.exports = ServiceWorkerContainer;

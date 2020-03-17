@@ -78,10 +78,11 @@ Headers.prototype.set = function(name, value) {
   this.headerDict[name] = [value];
 };
 
-Request = function(method, url, headers) {
-  this.method = method;
+Request = function(url, options) {
+  options = options || {};
   this.url = url;
-  this.headers = headers || new Headers({});
+  this.method = options.method || "GET";
+  this.headers = options.headers || new Headers({});
 };
 
 Request.prototype.clone = function() {
@@ -94,6 +95,19 @@ Response = function(body, url, status, headers) {
   this.status = status || 200;
   this.headers = headers || new Headers({});
 };
+
+Response.prototype.json = function () {
+  var data;
+  if (this.body && !this._json) {
+    try {
+      data = JSON.parse(this.body);
+    } catch (e) {
+        data = null;
+    }
+    this._json = Promise.resolve(data);
+  }
+  return this._json || Promise.resolve(null);
+}
 
 Response.prototype.clone = function() {
   return new Response(this.body, this.url, this.status, this.headers);
@@ -114,10 +128,14 @@ function fetch(input) {
   var url = input;
   var headers = {};
 
+
   // If it's actually an object, get the data from it.
   if (typeof input === 'object') {
     method = input.method;
     url = input.url;
+    if (typeof url === "object") {
+      url = url.toString();
+    }
     headers = input.headers;
   }
 
