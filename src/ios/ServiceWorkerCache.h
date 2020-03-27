@@ -27,6 +27,8 @@
 
 -(ServiceWorkerResponse *)matchForRequest:(NSURLRequest *)request inContext:(NSManagedObjectContext *)moc;
 -(ServiceWorkerResponse *)matchForRequest:(NSURLRequest *)request withOptions:(/*ServiceWorkerCacheMatchOptions*/NSDictionary *)options inContext:(NSManagedObjectContext *)moc;
+-(NSArray *)matchAllForRequest:(NSURLRequest *)request inContext:(NSManagedObjectContext *)moc;
+-(NSArray *)matchAllForRequest:(NSURLRequest *)request withOptions:(/*ServiceWorkerCacheMatchOptions*/NSDictionary *)options inContext:(NSManagedObjectContext *)moc;
 -(void) putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *)response inContext:(NSManagedObjectContext *)moc;
 -(bool) deleteRequest:(NSURLRequest *)request fromContext:(NSManagedObjectContext *)moc;
 -(NSArray *)requestsFromContext:(NSManagedObjectContext *)moc;

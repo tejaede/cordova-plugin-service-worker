@@ -67,17 +67,8 @@ static int64_t requestCount = 0;
     [NSURLProtocol setProperty:instanceForRequest forKey:@"ServiceWorkerPlugin" inRequest:workerRequest];
     NSNumber *requestId = [NSNumber numberWithLongLong:OSAtomicIncrement64(&requestCount)];
     [NSURLProtocol setProperty:requestId forKey:@"RequestId" inRequest:workerRequest];
-    NSString *serviceWorkerScriptFileName = [instanceForRequest serviceWorkerScriptFilename];
-    NSString *requestURL = [[workerRequest URL] absoluteString];
     
-    
-//    if ([requestURL hasSuffix: @"script-to-import.js"] ) {
-//        [workerRequest setURL:[NSURL URLWithString: [requestURL stringByReplacingOccurrencesOfString:@"script-to-import.js" withString:@"script-to-import.js"]]];
-//        NSLog(@"Set URL To: %@", [[workerRequest URL] absoluteString]);
-//    }
-//    
-    if ((serviceWorkerScriptFileName != nil && [requestURL hasSuffix:[instanceForRequest serviceWorkerScriptFilename]]) ||
-        [[[workerRequest URL] absoluteString] containsString:@"/sw_assets/"]) {
+    if ([[[workerRequest URL] absoluteString] hasSuffix:@"sw.js"] || [[[workerRequest URL] absoluteString] containsString:@"/sw_assets/"]) {
         NSMutableURLRequest *taggedRequest = [self.request mutableCopy];
         [NSURLProtocol setProperty:@YES forKey:@"PassThrough" inRequest:taggedRequest];
         self.connection = [NSURLConnection connectionWithRequest:taggedRequest delegate:self];

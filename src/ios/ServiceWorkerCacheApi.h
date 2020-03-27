@@ -41,6 +41,9 @@ extern NSString * const SERVICE_WORKER;
 -(void)defineFunctionsInContext:(JSContext *)context;
 -(ServiceWorkerCacheStorage *)cacheStorageForScope:(NSURL *)scope;
 -(BOOL)initializeStorage;
+-(void)putRequest:(NSURLRequest *) request andResponse:(ServiceWorkerResponse *)response inCache:(ServiceWorkerCache *)cache;
+-(ServiceWorkerResponse *) matchRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache;
+-(NSArray *) matchAllForRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache;
 
 @property (nonatomic, retain) NSMutableDictionary *cacheStorageMap;
 @property (nonatomic) BOOL cacheCordovaAssets;

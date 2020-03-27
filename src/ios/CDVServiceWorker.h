@@ -21,6 +21,7 @@
 #import <JavaScriptCore/JSContext.h>
 #import "ServiceWorkerCacheApi.h"
 
+
 extern NSString * const SERVICE_WORKER;
 extern NSString * const SERVICE_WORKER_CACHE_CORDOVA_ASSETS;
 extern NSString * const SERVICE_WORKER_ACTIVATED;
@@ -34,15 +35,23 @@ extern NSString * const REGISTRATION_KEY_INSTALLING;
 extern NSString * const REGISTRATION_KEY_REGISTERING_SCRIPT_URL;
 extern NSString * const REGISTRATION_KEY_SCOPE;
 extern NSString * const REGISTRATION_KEY_WAITING;
-extern NSString * const REMOTE_APPLICATION_URL;
 
 extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 
 @interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
 
 + (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request;
++ (CDVServiceWorker *)getSingletonInstance;
+
+
 - (void)markRequestComplete:(NSURLRequest *)request delegateTo:(NSURLProtocol *)protocol;
 - (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(NSURLProtocol *)protocol;
+- (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl;
+- (void)createServiceWorkerClientWithUrl:(NSString *)url;
+- (void)createServiceWorkerRegistrationWithScriptUrl:(NSString *)scriptUrl scopeUrl:(NSString *)scopeUrl;
+- (void)installServiceWorker:(void(^)())handler;
+- (void)activateServiceWorker;
+- (void)initiateServiceWorker;
 
 @property (nonatomic, retain) JSContext *context;
 @property (nonatomic, retain) UIWebView *workerWebView;
@@ -52,6 +61,12 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 @property (nonatomic, retain) NSString *serviceWorkerScriptFilename;
 @property (nonatomic, retain) ServiceWorkerCacheApi *cacheApi;
 @property (nonatomic, retain) NSMutableSet *serviceWorkerAssets;
+
+@property (class, nonatomic) bool isServiceWorkerActive;
+
+
+
+@property (nonatomic, copy) void (^initiateHandler)();
 
 @end
 

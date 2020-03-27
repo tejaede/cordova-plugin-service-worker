@@ -17,6 +17,8 @@
  under the License.
  */
 
+
+
 @interface ServiceWorkerRequest : NSObject
 
 @property (nonatomic, strong) NSURLRequest *request;

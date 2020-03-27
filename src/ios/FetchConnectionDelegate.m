@@ -28,8 +28,31 @@
 
 #pragma mark NSURLConnection Delegate Methods
 
+- (BOOL) getIsClosed {
+    if (_isClosed == nil) {
+        _isClosed = false;
+    }
+    return _isClosed;
+}
+
+- (void) setIsClosed: (BOOL)value {
+    _isClosed = value;
+}
+
+
 - (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response {
+    _swResponse = [ServiceWorkerResponse new];
+    _swResponse.url =  [[[connection currentRequest] URL] absoluteString];
+    if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+       NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse*)response;
+       _swResponse.status = [NSNumber numberWithInteger:[httpResponse statusCode]];
+       _swResponse.headers = [httpResponse allHeaderFields];
+    } else {
+        _swResponse.status = @200;
+        _swResponse.headers = nil;
+    }
     self.responseData = [[NSMutableData alloc] init];
+    self.isClosed = YES;
 }
 
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {
@@ -42,19 +65,20 @@
 }
 
 - (void)connectionDidFinishLoading:(NSURLConnection *)connection {
-    // Create the response object.
-    ServiceWorkerResponse *response = [ServiceWorkerResponse new];
-    response.url = [[[connection currentRequest] URL] absoluteString];
-    response.body = self.responseData;
-    response.status = @200;
-    response.headers = [[connection currentRequest] allHTTPHeaderFields];
-
-    // Convert the response to a dictionary and send it to the promise resolver.
-    self.resolve(response);
+    if (_swResponse == nil) {
+        _swResponse = [ServiceWorkerResponse new];
+        _swResponse.status = @200;
+        _swResponse.headers = nil;
+    }
+    _swResponse.body = self.responseData;
+    self.resolve(_swResponse);
+    self.isClosed = YES;
 }
 
 - (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error {
-    NSLog(@"%@", [error description]);
+    NSLog(@"Failed to load %@", [[[connection currentRequest] URL] absoluteString]);
+    self.reject(error);
+    self.isClosed = YES;
 }
 
 @end

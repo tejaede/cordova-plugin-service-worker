@@ -16,6 +16,9 @@
  specific language governing permissions and limitations
  under the License.
  */
+/* Required to test in swift*/
+#import "CDVServiceWorker.h"
+
 
 @interface FetchInterceptorProtocol : NSURLProtocol {}
 

@@ -23,8 +23,10 @@
 @interface FetchConnectionDelegate : NSObject <NSURLConnectionDelegate>
 
 @property (nonatomic, retain) NSMutableData *responseData;
+@property (nonatomic, retain) ServiceWorkerResponse *swResponse;
 @property (nonatomic, copy) void (^resolve)(ServiceWorkerResponse *);
-@property (nonatomic, copy) void (^reject)(NSString *);
+@property (nonatomic, copy) void (^reject)(NSError *);
+@property (nonatomic) BOOL isClosed;
 
 @end
 

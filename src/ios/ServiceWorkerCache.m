@@ -85,6 +85,11 @@
     return bestResponse;
 }
 
+-(NSArray *)matchAllForRequest:(NSURLRequest *)request inContext:(NSManagedObjectContext *)moc
+{
+    return [self matchAllForRequest:request withOptions:@{} inContext:moc];
+}
+
 -(NSArray *)matchAllForRequest:(NSURLRequest *)request withOptions:(/*ServiceWorkerCacheMatchOptions*/NSDictionary *)options inContext:(NSManagedObjectContext *)moc
 {
     BOOL query = [options[@"includeQuery"] boolValue];
@@ -120,8 +125,16 @@
 
 -(void)putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *)response inContext:(NSManagedObjectContext *)moc
 {
-    ServiceWorkerCacheEntry *entry = (ServiceWorkerCacheEntry *)[NSEntityDescription insertNewObjectForEntityForName:@"CacheEntry"
-     inManagedObjectContext:moc];
+    
+    NSArray *entries  = [self entriesMatchingRequestByURL: request.URL includesQuery:NO inContext:moc];
+    ServiceWorkerCacheEntry *entry;
+    if (entries != nil && [entries count] >= 1) {
+        entry = [entries objectAtIndex:0];
+        NSLog(@"Cache.putRequest: overwrite existing entry %@", [request.URL absoluteString]);
+    } else {
+        NSLog(@"Cache.putRequest: insert new entry %@", [request.URL absoluteString]);
+        entry = (ServiceWorkerCacheEntry *)[NSEntityDescription insertNewObjectForEntityForName:@"CacheEntry" inManagedObjectContext:moc];
+    }
     entry.url = [self urlWithoutQueryForUrl:request.URL];
     entry.query = request.URL.query;
     entry.request = [NSKeyedArchiver archivedDataWithRootObject:request];

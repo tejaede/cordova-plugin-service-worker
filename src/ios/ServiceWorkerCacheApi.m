@@ -17,7 +17,7 @@
  under the License.
  */
 
-#import <Foundation/Foundation.h>
+
 #import <JavaScriptCore/JavaScriptCore.h>
 #import "FetchConnectionDelegate.h"
 #import "ServiceWorkerCacheApi.h"
@@ -142,6 +142,8 @@ static NSString *rootPath_;
     return response;
 }
 
+
+
 @end
 
 @implementation ServiceWorkerCacheApi
@@ -255,6 +257,8 @@ static NSString *rootPath_;
 
     cacheEntity.properties = cacheProperties;
     cacheEntryEntity.properties = cacheEntryProperties;
+    
+    cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObject: @"url"]];
 
     [entities addObject:cacheEntity];
     [entities addObject:cacheEntryEntity];
@@ -414,9 +418,13 @@ NSLog(@"Using short url: %@", shortUrlRequest.URL);
         // Retrieve the caches.
         NSURL *scope = [NSURL URLWithString:self.absoluteScope];
         ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
+        
+        
 
         // Convert the given request into an NSURLRequest.
         NSURLRequest *urlRequest = [self nativeRequestFromJsRequest:request];
+        
+        NSLog(@"CacheMatch: %@", [[urlRequest URL] path]);
 
         // Check for a match in the cache.
         // TODO: Deal with multiple matches.
@@ -552,10 +560,12 @@ NSLog(@"Using short url: %@", shortUrlRequest.URL);
     };
 }
 
+
 -(NSMutableURLRequest *)nativeRequestFromJsRequest:(JSValue *)jsRequest
 {
     NSDictionary *requestDictionary = [jsRequest toDictionary];
     return [self nativeRequestFromDictionary:requestDictionary];
+    
 }
 
 -(NSMutableURLRequest *)nativeRequestFromDictionary:(NSDictionary *)requestDictionary
@@ -566,6 +576,25 @@ NSLog(@"Using short url: %@", shortUrlRequest.URL);
     }
     return [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
 }
+
+#pragma Unit Testing
+
+-(void) putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *) response inCache:(ServiceWorkerCache *) cache
+{
+
+    [cache putRequest:request andResponse:response inContext:moc];
+}
+
+-(ServiceWorkerResponse *) matchRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache
+{
+    return [cache matchForRequest:request inContext:moc];
+}
+
+-(NSArray *) matchAllForRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache
+{
+    return [cache matchAllForRequest:request inContext:moc];
+}
+
 
 @end
 

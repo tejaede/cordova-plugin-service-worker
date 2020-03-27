@@ -57,8 +57,13 @@
 
 - (NSDictionary *)toDictionary {
     // Convert the body to base64.
-    NSString *encodedBody = [self.body base64Encoding];
-    return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new]] forKeys:@[@"url", @"body", @"status", @"headers"]];
+    if (self.url == nil) {
+        NSLog(@"Failed to convert ServiceWorkerResponseToDictionary because response.url is nil");
+        return nil;
+    } else {
+        NSString *encodedBody = [self.body base64EncodedStringWithOptions: 0];
+        return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new]] forKeys:@[@"url", @"body", @"status", @"headers"]];
+    }
 }
 
 

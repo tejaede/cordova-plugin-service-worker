@@ -14,6 +14,11 @@ FetchEvent = function(eventInitDict) {
       Object.defineProperty(this, 'isReload', {value: !!(eventInitDict.isReload)});
     }
   }
+  Object.defineProperty(this, "type", {
+      get: function () {
+          return "fetch";
+      }
+  });
 };
 FetchEvent.prototype = Object.create(Event.prototype);
 FetchEvent.constructor = FetchEvent;
@@ -83,6 +88,13 @@ Request = function(url, options) {
   this.url = url;
   this.method = options.method || "GET";
   this.headers = options.headers || new Headers({});
+};
+
+Request.create = function (method, url, headers) {
+  return new Request(url, {
+    method: method,
+    headers: headers
+  });
 };
 
 Request.prototype.clone = function() {
