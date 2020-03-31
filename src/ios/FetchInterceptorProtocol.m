@@ -31,7 +31,7 @@ static int64_t requestCount = 0;
     // We don't want to intercept any requests for the worker page.
     if ([[[request URL] absoluteString] hasSuffix:@"GeneratedWorker.html"]) {
         return NO;
-    }
+    }    
 
     // Check - is there a service worker for this request?
     // For now, assume YES -- all requests go through service worker. This may be incorrect if there are iframes present.
@@ -41,14 +41,15 @@ static int64_t requestCount = 0;
     } else if ([NSURLProtocol propertyForKey:@"PureFetch" inRequest:request]) {
         // Fetching directly; bypass ServiceWorker.
         return NO;
+    } else if ([request valueForHTTPHeaderField:@"x-import-scripts"] != nil){
+        NSLog(@"canInitWithRequest IMPORT %@",   [[request URL] absoluteString]);
+        return NO;
+    } else if ([CDVServiceWorker instanceForRequest:request]) {
+        // Handling
+        return YES;
     } else {
-        if ([CDVServiceWorker instanceForRequest:request]) {
-            // Handling
-            return YES;
-        } else {
-            // No Service Worker installed; not handling
-            return NO;
-        }
+        // No Service Worker installed; not handling
+        return NO;
     }
 }
 
@@ -67,7 +68,7 @@ static int64_t requestCount = 0;
     [NSURLProtocol setProperty:instanceForRequest forKey:@"ServiceWorkerPlugin" inRequest:workerRequest];
     NSNumber *requestId = [NSNumber numberWithLongLong:OSAtomicIncrement64(&requestCount)];
     [NSURLProtocol setProperty:requestId forKey:@"RequestId" inRequest:workerRequest];
-    
+    NSLog(@"startLoading %@", [[self.request URL] absoluteString]);
     if ([[[workerRequest URL] absoluteString] hasSuffix:@"sw.js"] || [[[workerRequest URL] absoluteString] containsString:@"/sw_assets/"]) {
         NSMutableURLRequest *taggedRequest = [self.request mutableCopy];
         [NSURLProtocol setProperty:@YES forKey:@"PassThrough" inRequest:taggedRequest];

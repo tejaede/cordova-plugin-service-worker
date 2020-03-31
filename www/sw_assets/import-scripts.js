@@ -1,5 +1,5 @@
 var globalEval = eval;
-window.importScripts = importScripts = function importer(workerUrl) {
+window.importScripts = importScripts = function importer() {
 
     var urls = [].slice.call(arguments).filter(function (arg) {
         return (typeof arg === 'string');
@@ -8,10 +8,11 @@ window.importScripts = importScripts = function importer(workerUrl) {
     // Sync get each URL and return as one string to be eval'd.
     // These requests are done in series. TODO: Possibly solve?
     return urls.map(function(url) {
-        var baseURL = window.baseImportURL || window.location.href,
-            absoluteUrl = new URL(url, baseURL),
+
+        var absoluteUrl = URL.absoluteURLfromMainClient(url),
             xhr = new XMLHttpRequest();
         xhr.open('GET', absoluteUrl, false);
+        xhr.setRequestHeader("x-import-scripts", "true");
         xhr.send(null);
         xhr.status = parseInt(xhr.status, 10);
         if (xhr.status === 200) {

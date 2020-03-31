@@ -159,7 +159,7 @@ CDVServiceWorker * singletonInstance = nil;
     
     
     if (clientURL != nil) {
-        NSString *setBaseURLCode = [NSString stringWithFormat: @"window.baseImportURL = '%@';", clientURL];
+        NSString *setBaseURLCode = [NSString stringWithFormat: @"window.mainClientURL = '%@';", clientURL];
         [self evaluateScript: setBaseURLCode];
     }
 
@@ -198,7 +198,7 @@ CDVServiceWorker * singletonInstance = nil;
         if (serviceWorkerScript != nil) {
 //            if (![[self hashForString:serviceWorkerScript] isEqualToString:serviceWorkerScriptChecksum]) {
                 NSLog(@"Create Service Worker: %@", serviceWorkerScriptRelativePath);
-            [self createServiceWorkerFromScript:absoluteScriptUrl clientUrl:clientURL];
+                [self createServiceWorkerFromScript:absoluteScriptUrl clientUrl:clientURL];
                 [self createServiceWorkerClientWithUrl:clientURL];
                 [self createServiceWorkerRegistrationWithScriptUrl:scriptUrl scopeUrl:scopeUrl];
                 [self installServiceWorker];
@@ -302,8 +302,10 @@ CDVServiceWorker * singletonInstance = nil;
 {
     
     if ([NSThread isMainThread]) {
+        NSLog(@"EvaluateScript ALREADY MAIN: %@", script);
         NSString *result = [self.workerWebView stringByEvaluatingJavaScriptFromString:script];
     } else {
+        NSLog(@"EvaluateScript PERFORM ON MAIN: %@", script);
         [self.workerWebView performSelectorOnMainThread:@selector(stringByEvaluatingJavaScriptFromString:) withObject:script waitUntilDone:NO];
     }
 }

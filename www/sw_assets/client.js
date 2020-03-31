@@ -3,10 +3,19 @@ Clients = function(clientList) {
   return this;
 };
 
+Clients.prototype.claim = function () {
+  return Promise.resolve(null);
+};
+
 // TODO: Add `options`.
 Clients.prototype.getAll = function() {
   return this.clientList;
-}
+};
+
+// TODO: Add `options`.
+Clients.prototype.matchAll = function () {
+  return Promise.resolve(this.clientList);
+};
 
 var clients = new Clients([]);
 

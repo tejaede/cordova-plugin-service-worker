@@ -85,7 +85,7 @@ Headers.prototype.set = function(name, value) {
 
 Request = function(url, options) {
   options = options || {};
-  this.url = url;
+  this.url = URL.absoluteURLfromMainClient(url);
   this.method = options.method || "GET";
   this.headers = options.headers || new Headers({});
 };
@@ -132,24 +132,35 @@ Response.prototype.toDict = function() {
           "headers": this.headers};
 };
 
+var protocolRegexp = /^^(file|https?)\:\/\//;
+URL.absoluteURLfromMainClient = function (url) {
+  var baseURL = window.mainClientURL || window.location.href;
+  return protocolRegexp.test(url) ? url : new URL(url, baseURL).toString();
+};
 // This function returns a promise with a response for fetching the given resource.
 function fetch(input) {
   // Assume the passed in input is a resource URL string.
   // TODO: What should the default headers be?
-  var method = 'GET';
-  var url = input;
-  var headers = {};
+  var method, headers, url;
 
-
-  // If it's actually an object, get the data from it.
-  if (typeof input === 'object') {
+  if (input instanceof Request) {
     method = input.method;
     url = input.url;
-    if (typeof url === "object") {
-      url = url.toString();
-    }
     headers = input.headers;
+  } else if (typeof input === "object") {
+    method = input.method;
+    url = URL.absoluteURLfromMainClient(input.url);
+    headers = input.headers;
+  } else {
+    url = URL.absoluteURLfromMainClient(input);
+    method = 'GET';
+    headers = {};
   }
+
+  if (url.indexOf("bluebird.min.js") !== -1) {
+    debugger;
+  }
+
 
   return new Promise(function(innerResolve, reject) {
     // Wrap the resolve callback so we can decode the response body.
