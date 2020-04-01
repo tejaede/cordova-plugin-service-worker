@@ -1,29 +1,37 @@
-FetchEvent = function(eventInitDict) {
+FetchEvent = function (eventInitDict) {
   Event.call(this, 'fetch');
   if (eventInitDict) {
     if (eventInitDict.id) {
-      Object.defineProperty(this, '__requestId', {value: eventInitDict.id});
+      Object.defineProperty(this, '__requestId', {
+        value: eventInitDict.id
+      });
     }
     if (eventInitDict.request) {
-      Object.defineProperty(this, 'request', {value: eventInitDict.request});
+      Object.defineProperty(this, 'request', {
+        value: eventInitDict.request
+      });
     }
     if (eventInitDict.client) {
-      Object.defineProperty(this, 'client', {value: eventInitDict.client});
+      Object.defineProperty(this, 'client', {
+        value: eventInitDict.client
+      });
     }
     if (eventInitDict.isReload) {
-      Object.defineProperty(this, 'isReload', {value: !!(eventInitDict.isReload)});
+      Object.defineProperty(this, 'isReload', {
+        value: !!(eventInitDict.isReload)
+      });
     }
   }
   Object.defineProperty(this, "type", {
-      get: function () {
-          return "fetch";
-      }
+    get: function () {
+      return "fetch";
+    }
   });
 };
 FetchEvent.prototype = Object.create(Event.prototype);
 FetchEvent.constructor = FetchEvent;
 
-FetchEvent.prototype.respondWith = function(response) {
+FetchEvent.prototype.respondWith = function (response) {
   // Prevent the default handler from running, so that it doesn't override this response.
   this.preventDefault();
 
@@ -31,7 +39,7 @@ FetchEvent.prototype.respondWith = function(response) {
   var requestId = this.__requestId;
 
   // Send the response to native.
-  var convertAndHandle = function(response) {
+  var convertAndHandle = function (response) {
     response.body = window.btoa(response.body);
     handleFetchResponse(requestId, response);
   };
@@ -45,17 +53,19 @@ FetchEvent.prototype.respondWith = function(response) {
   }
 };
 
-FetchEvent.prototype.forwardTo = function(url) {};
+FetchEvent.prototype.forwardTo = function (url) {};
 
-FetchEvent.prototype.default = function(ev) {
-  handleFetchDefault(ev.__requestId, {url:ev.request.url});
+FetchEvent.prototype.default = function (ev) {
+  handleFetchDefault(ev.__requestId, {
+    url: ev.request.url
+  });
 };
 
-Headers = function(headerDict) {
+Headers = function (headerDict) {
   this.headerDict = headerDict || {};
 };
 
-Headers.prototype.append = function(name, value) {
+Headers.prototype.append = function (name, value) {
   if (this.headerDict[name]) {
     this.headerDict[name].push(value);
   } else {
@@ -63,27 +73,27 @@ Headers.prototype.append = function(name, value) {
   }
 };
 
-Headers.prototype.delete = function(name) {
+Headers.prototype.delete = function (name) {
   delete this.headerDict[name];
 };
 
-Headers.prototype.get = function(name) {
+Headers.prototype.get = function (name) {
   return this.headerDict[name] ? this.headerDict[name][0] : null;
 };
 
-Headers.prototype.getAll = function(name) {
+Headers.prototype.getAll = function (name) {
   return this.headerDict[name] ? this.headerDict[name] : null;
 };
 
-Headers.prototype.has = function(name, value) {
+Headers.prototype.has = function (name, value) {
   return this.headerDict[name] !== undefined;
 };
 
-Headers.prototype.set = function(name, value) {
+Headers.prototype.set = function (name, value) {
   this.headerDict[name] = [value];
 };
 
-Request = function(url, options) {
+Request = function (url, options) {
   options = options || {};
   this.url = URL.absoluteURLfromMainClient(url);
   this.method = options.method || "GET";
@@ -97,11 +107,11 @@ Request.create = function (method, url, headers) {
   });
 };
 
-Request.prototype.clone = function() {
+Request.prototype.clone = function () {
   return new Request(this.method, this.url, this.headers);
 };
 
-Response = function(body, url, status, headers) {
+Response = function (body, url, status, headers) {
   this.body = body;
   this.url = url;
   this.status = status || 200;
@@ -114,22 +124,24 @@ Response.prototype.json = function () {
     try {
       data = JSON.parse(this.body);
     } catch (e) {
-        data = null;
+      data = null;
     }
     this._json = Promise.resolve(data);
   }
   return this._json || Promise.resolve(null);
 }
 
-Response.prototype.clone = function() {
+Response.prototype.clone = function () {
   return new Response(this.body, this.url, this.status, this.headers);
 };
 
-Response.prototype.toDict = function() {
-  return {"body": window.btoa(this.body),
-          "url": this.url,
-          "status": this.status,
-          "headers": this.headers};
+Response.prototype.toDict = function () {
+  return {
+    "body": window.btoa(this.body),
+    "url": this.url,
+    "status": this.status,
+    "headers": this.headers
+  };
 };
 
 var protocolRegexp = /^^(file|https?)\:\/\//;
@@ -157,16 +169,12 @@ function fetch(input) {
     headers = {};
   }
 
-  if (url.indexOf("bluebird.min.js") !== -1) {
-    debugger;
-  }
 
-
-  return new Promise(function(innerResolve, reject) {
+  return new Promise(function (innerResolve, reject) {
     // Wrap the resolve callback so we can decode the response body.
-    var resolve = function(response) {
-        var jsResponse = new Response(window.atob(response.body), response.url, response.status, response.headers);
-        innerResolve(jsResponse);
+    var resolve = function (response) {
+      var jsResponse = new Response(window.atob(response.body), response.url, response.status, response.headers);
+      innerResolve(jsResponse);
     };
 
     // Call a native function to fetch the resource.
@@ -174,3 +182,38 @@ function fetch(input) {
   });
 }
 
+handleTrueFetch = function (method, url, headers, resolve, reject) {
+  var message = {
+    method: method,
+    url: url,
+    headers: headers
+  };
+  console.log(message);
+  cordovaExec("trueFetch", message, function (response, error) {
+    if (error) {
+      reject(error);
+    } else {
+      resolve(response);
+    }
+  });
+};
+
+handleFetchResponse = function (requestId, response) {
+  var message = {
+    requestId: requestId,
+    response: response
+  };
+  cordovaExec("fetchResponse", message, function (response, error) {
+    //intentionally noop
+  });
+};
+
+handleFetchDefault = function (requestId, request) {
+  var message = {
+    requestId: requestId,
+    request: request
+  };
+  cordovaExec("fetchDefault", message, function (response, error) {
+    //intentionally noop
+  });
+};

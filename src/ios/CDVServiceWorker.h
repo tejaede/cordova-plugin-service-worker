@@ -19,7 +19,7 @@
 
 #import <Cordova/CDVPlugin.h>
 #import <JavaScriptCore/JSContext.h>
-#import "ServiceWorkerCacheApi.h"
+#import <WebKit/WebKit.h>
 
 
 extern NSString * const SERVICE_WORKER;
@@ -38,11 +38,11 @@ extern NSString * const REGISTRATION_KEY_WAITING;
 
 extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 
-@interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
+//@interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
+@interface CDVServiceWorker : CDVPlugin <WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler> {}
 
 + (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request;
 + (CDVServiceWorker *)getSingletonInstance;
-
 
 - (void)markRequestComplete:(NSURLRequest *)request delegateTo:(NSURLProtocol *)protocol;
 - (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(NSURLProtocol *)protocol;
@@ -52,17 +52,19 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 - (void)installServiceWorker:(void(^)())handler;
 - (void)activateServiceWorker;
 - (void)initiateServiceWorker;
+- (NSString *) handlerNameForMessage: (WKScriptMessage *) message;
+- (void) handleLogScriptMessage: (WKScriptMessage *) message;
+- (void) sendResultToWorker:(NSNumber*) messageId parameters:(NSDictionary *)parameters;
 
 @property (nonatomic, retain) JSContext *context;
-@property (nonatomic, retain) UIWebView *workerWebView;
+@property (nonatomic, retain) WKWebView *workerWebView;
 @property (nonatomic, retain) NSMutableDictionary *requestDelegates;
 @property (nonatomic, retain) NSMutableArray *requestQueue;
 @property (nonatomic, retain) NSDictionary *registration;
 @property (nonatomic, retain) NSString *serviceWorkerScriptFilename;
-@property (nonatomic, retain) ServiceWorkerCacheApi *cacheApi;
 @property (nonatomic, retain) NSMutableSet *serviceWorkerAssets;
 
-@property (class, nonatomic) bool isServiceWorkerActive;
+@property (nonatomic) Boolean *isServiceWorkerActive;
 
 
 

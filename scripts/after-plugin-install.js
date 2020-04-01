@@ -1,7 +1,6 @@
-'use strict'
+'use strict';
 /* globals require, module */
 const fs = require('fs');
-const util = require('util');
 const path = require("path");
 
 const ASSET_DIR_PATH = "www/sw_assets",
@@ -65,8 +64,7 @@ function getPluginContext(buildContext) {
 function readAndNormalizePolyfillAssets(assetsDir, indent) {
     return readDir(assetsDir).then(function (assets) {
         return assets.map(function (assetPath) {
-            assetPath = path.join(ASSET_DIR_PATH, assetPath);
-            return indent + '"' + assetPath + '"';
+            return indent + "'" + assetPath + "'";
         });
     });
 }
@@ -85,7 +83,9 @@ module.exports = function(context) {
         indent = match && match[1] || "";
 
     return readAndNormalizePolyfillAssets(assetsDir, indent).then(function (assets) {
-        var content = replaceTokensInLoader(srcLoaderContent, assets);
+        var content = replaceTokensInLoader(srcLoaderContent, assets.filter(function (assetPath) {
+            return assetPath.indexOf(".js") !== -1;
+        }));
         pluginContext.targetPolyfillLoaderPaths.forEach(function (targetFile) {
             fs.writeFileSync(targetFile, content, "utf8");
         });

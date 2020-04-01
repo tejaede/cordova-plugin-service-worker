@@ -32,7 +32,7 @@ static int64_t requestCount = 0;
     if ([[[request URL] absoluteString] hasSuffix:@"GeneratedWorker.html"]) {
         return NO;
     }    
-
+    
     // Check - is there a service worker for this request?
     // For now, assume YES -- all requests go through service worker. This may be incorrect if there are iframes present.
     if ([NSURLProtocol propertyForKey:@"PassThrough" inRequest:request]) {
@@ -79,9 +79,6 @@ static int64_t requestCount = 0;
 }
 
 - (void)stopLoading {
-    NSMutableURLRequest *workerRequest = [self.request mutableCopy];
-    CDVServiceWorker *instanceForRequest = [CDVServiceWorker instanceForRequest:workerRequest];
-    [instanceForRequest markRequestComplete:workerRequest delegateTo:self];
     [self.connection cancel];
     self.connection = nil;
 }

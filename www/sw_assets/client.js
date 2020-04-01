@@ -26,10 +26,14 @@ Client = function(url) {
   clients.clientList.push(this);
 
   return this;
-}
+};
 
 // TODO: Add `transfer`.
 Client.prototype.postMessage = function(message) {
   postMessageInternal(Kamino.stringify(message));
-}
+};
 
+
+postMessageInternal = function (message) {
+  cordovaExec("postMessage", message);
+};
