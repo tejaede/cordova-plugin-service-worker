@@ -20,6 +20,7 @@
 #import <Cordova/CDVPlugin.h>
 #import <JavaScriptCore/JSContext.h>
 #import <WebKit/WebKit.h>
+#import "CDVBackgroundSync.h"
 
 
 extern NSString * const SERVICE_WORKER;
@@ -44,7 +45,6 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 + (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request;
 + (CDVServiceWorker *)getSingletonInstance;
 
-- (void)markRequestComplete:(NSURLRequest *)request delegateTo:(NSURLProtocol *)protocol;
 - (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(NSURLProtocol *)protocol;
 - (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl;
 - (void)createServiceWorkerClientWithUrl:(NSString *)url;
@@ -56,6 +56,7 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 - (void) handleLogScriptMessage: (WKScriptMessage *) message;
 - (void) sendResultToWorker:(NSNumber*) messageId parameters:(NSDictionary *)parameters;
 
+@property (nonatomic, retain) CDVBackgroundSync *backgroundSync;
 @property (nonatomic, retain) JSContext *context;
 @property (nonatomic, retain) WKWebView *workerWebView;
 @property (nonatomic, retain) NSMutableDictionary *requestDelegates;

@@ -25,6 +25,7 @@
 #import "FetchConnectionDelegate.h"
 #import "FetchInterceptorProtocol.h"
 #import "ServiceWorkerRequest.h"
+#import "CDVBackgroundSync.h"
 
 static bool isServiceWorkerActive = NO;
 
@@ -47,7 +48,7 @@ NSString * const SERVICE_WORKER_KEY_SCRIPT_URL = @"scriptURL";
 
 @implementation CDVServiceWorker
 
-@synthesize context = _context;
+@synthesize backgroundSync = _backgroundSync;
 @synthesize workerWebView = _workerWebView;
 @synthesize registration = _registration;
 @synthesize requestDelegates = _requestDelegates;
@@ -125,7 +126,9 @@ CDVServiceWorker * singletonInstance = nil;
     self.requestQueue = [NSMutableArray new];
 
     [NSURLProtocol registerClass:[FetchInterceptorProtocol class]];
-
+    
+    self.backgroundSync = [[CDVBackgroundSync alloc] init];
+    [self.backgroundSync pluginInitialize];
 
     self.workerWebView = [[WKWebView alloc] init]; // Headless
     [self.workerWebView.configuration.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
@@ -153,6 +156,7 @@ CDVServiceWorker * singletonInstance = nil;
     [controller addScriptMessageHandler:self name:@"fetchDefault"];
     [controller addScriptMessageHandler:self name:@"trueFetch"];
     [controller addScriptMessageHandler:self name:@"postMessage"];
+    [controller addScriptMessageHandler:self name:@"registerSync"];
 }
 
 - (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message
@@ -176,6 +180,8 @@ CDVServiceWorker * singletonInstance = nil;
          [self handleFetchDefaultScriptMessage:message];
     } else if ([handlerName isEqualToString:@"handlePostMessageScriptMessage"]) {
          [self handlePostMessageScriptMessage:message];
+    } else if ([handlerName isEqualToString:@"handleRegisterSyncScriptMessage"]) {
+         [self handleRegisterSyncScriptMessage:message];
     } else {
         NSLog(@"DidReceiveScriptMessage %@", handlerName);
     }
@@ -185,9 +191,15 @@ CDVServiceWorker * singletonInstance = nil;
 - (void) sendResultToWorker:(NSNumber*) messageId parameters:(NSDictionary *)parameters
 {
     NSError *error;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:parameters options:NSJSONWritingPrettyPrinted error:&error];
-    NSString *parameterString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-    NSString* cordovaCallbackScript = [NSString stringWithFormat:@"cordovaCallback(%@, %@);", messageId, parameterString];
+    NSString* cordovaCallbackScript;
+    if (parameters != nil) {
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:parameters options:NSJSONWritingPrettyPrinted error:&error];
+        NSString *parameterString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+        cordovaCallbackScript = [NSString stringWithFormat:@"cordovaCallback(%@, %@);", messageId, parameterString];
+    } else {
+        cordovaCallbackScript = [NSString stringWithFormat:@"cordovaCallback(%@);", messageId];
+    }
+    
     [self.workerWebView evaluateJavaScript:cordovaCallbackScript completionHandler:^(id result, NSError *error) {
         if (error != nil) {
             NSLog(@"Failed to run cordovaCallback due to error %@", [error localizedDescription]);
@@ -238,17 +250,12 @@ CDVServiceWorker * singletonInstance = nil;
     NSDictionary *body = [message body];
     NSDictionary *response = [body valueForKey: @"response"];
     NSString *jsRequestId = [body valueForKey: @"requestId"];
-//    [formatter numberFromString:[jsRequestId toString]]
     NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
     [formatter setNumberStyle:NSNumberFormatterDecimalStyle];
-//    NSNumber *requestId = [formatter numberFromString:[jsRequestId toString]];
     NSNumber *requestId = [formatter numberFromString:jsRequestId];
     FetchInterceptorProtocol *interceptor = (FetchInterceptorProtocol *)[self.requestDelegates objectForKey:jsRequestId];
     [self.requestDelegates removeObjectForKey:requestId];
 
-    // Convert the response body to base64.
-//        NSData *data = [NSData dataFromBase64String:[response[@"body"] toString]];
-//        NSData *data = [NSData dataFromBase64String:[response[@"body"] toString]];
     NSData *data = [[NSData alloc] initWithBase64EncodedString:[response[@"body"] toString] options:0];
     JSValue *headers = response[@"headers"];
     NSString *mimeType = [headers[@"mimeType"] toString];
@@ -350,7 +357,37 @@ CDVServiceWorker * singletonInstance = nil;
     
 }
 
-# pragma mark ServiceWorker Functions
+
+- (void)handleRegisterSyncScriptMessage: (WKScriptMessage *) message {
+    NSDictionary *body = [message body];
+    NSNumber *messageId = [body valueForKey:@"messageId"];
+    NSString *syncType = [body valueForKey:@"type"];
+    NSDictionary *options = [body valueForKey:@"registration"];
+    [_backgroundSync registerSync: options withType: syncType];
+    [self sendResultToWorker:messageId parameters: nil];
+}
+
+- (void)handleUnregisterSyncMessage: (WKScriptMessage *) message {
+//    NSDictionary *body = [message body];
+}
+
+- (void)handleGetSyncRegistrationMessage: (WKScriptMessage *) message {
+    
+}
+
+- (void)handleGetSyncRegistrationsMessage: (WKScriptMessage *) message {
+    
+}
+
+- (void)handleSyncResponseMessage: (WKScriptMessage *) message {
+    
+}
+
+- (void)handlePeriodicSyncResponseMessage: (WKScriptMessage *) message {
+    
+}
+
+# pragma mark Cordova ServiceWorker Functions
 
 - (void)register:(CDVInvokedUrlCommand*)command
 {
@@ -466,7 +503,7 @@ CDVServiceWorker * singletonInstance = nil;
     NSString *message = [command argumentAtIndex:0];
 
     // Fire a message event in the JSContext.
-    NSString *dispatchCode = [NSString stringWithFormat:@"dispatchEvent(new MessageEvent({data:Kamino.parse('%@')}));", message];
+    NSString *dispatchCode = [NSString stringWithFormat:@"dispatchEvent(new MessageEvent({data:Kamino.parse('%@')}));'';", message];
     [self evaluateScript:dispatchCode];
 }
 
@@ -475,13 +512,13 @@ CDVServiceWorker * singletonInstance = nil;
 {
     _initiateHandler = handler;
     NSLog(@"Fire Mock SW Install Event");
-    [self evaluateScript:@"setTimeout(function () {FireInstallEvent().then(window.installServiceWorkerCallback);}, 10);"];
+    [self evaluateScript:@"setTimeout(function () {FireInstallEvent().then(window.installServiceWorkerCallback);}, 10);'';"];
 }
 
 - (void)installServiceWorker
 {
     NSLog(@"Fire Mock SW Install Event");
-    [self evaluateScript:@"setTimeout(function () {FireInstallEvent().then(window.installServiceWorkerCallback);}, 10);"];
+    [self evaluateScript:@"setTimeout(function () {FireInstallEvent().then(window.installServiceWorkerCallback);}, 10);'';"];
 }
 
 - (void)activateServiceWorker
@@ -534,147 +571,9 @@ NSString *_clientUrl = nil;
 - (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl
 {
     _clientUrl = clientUrl;
-    // Get the JSContext from the webview
-//    self.context = [self.workerWebView valueForKeyPath:@"documentView.webView.mainFrame.javaScriptContext"];
-//    JSContext *myContext = self.context;
-//    [self.context setExceptionHandler:^(JSContext *context, JSValue *value) {
-//        NSLog(@"%@", value);
-//    }];
-
-    // Pipe JS logging in this context to NSLog.
-    // NOTE: Not the nicest of hacks, but useful!
-//    [self evaluateScript:@"var swLog = {}"];
-//    self.context[@"swLog"][@"log"] = ^(NSString *message) {
-//        NSLog(@"[ServiceWorker] %@", message);
-//    };
-//    [self evaluateScript:@"var origLog = console.log; console.log=function () {swLog.log(Array.from(arguments).join(' '));origLog.apply(console, arguments);};"];
-
-//    CDVServiceWorker * __weak weakSelf = self;
-//    self.context[@"installServiceWorkerCallback"] = ^() {
-//        NSLog(@"Service Worker was installed. Trying to activate...");
-//        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:SERVICE_WORKER_INSTALLED];
-//        [weakSelf activateServiceWorker];
-//    };
-//
-//    self.context[@"activateServiceWorkerCallback"] = ^() {
-//        NSLog(@"Service Worker was activated. Trying to initiate...");
-//        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:SERVICE_WORKER_ACTIVATED];
-//        [weakSelf initiateServiceWorker];
-//    };
-    
-    
-
-//    self.context[@"handleFetchResponse"] = ^(JSValue *jsRequestId, JSValue *response) {
-//        NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
-//        [formatter setNumberStyle:NSNumberFormatterDecimalStyle];
-//        NSNumber *requestId = [formatter numberFromString:[jsRequestId toString]];
-//        FetchInterceptorProtocol *interceptor = (FetchInterceptorProtocol *)[weakSelf.requestDelegates objectForKey:requestId];
-//        [weakSelf.requestDelegates removeObjectForKey:requestId];
-//
-//        // Convert the response body to base64.
-////        NSData *data = [NSData dataFromBase64String:[response[@"body"] toString]];
-////        NSData *data = [NSData dataFromBase64String:[response[@"body"] toString]];
-//        NSData *data = [[NSData alloc] initWithBase64EncodedString:[response[@"body"] toString] options:0];
-//        JSValue *headers = response[@"headers"];
-//        NSString *mimeType = [headers[@"mimeType"] toString];
-//        NSString *encoding = @"utf-8";
-//        NSString *url = [response[@"url"] toString]; // TODO: Can this ever be different than the request url? if not, don't allow it to be overridden
-//
-//        NSURLResponse *urlResponse = [[NSURLResponse alloc] initWithURL:[NSURL URLWithString:url]
-//                                                            MIMEType:mimeType
-//                                               expectedContentLength:data.length
-//                                                    textEncodingName:encoding];
-//
-//        [interceptor handleAResponse:urlResponse withSomeData:data];
-//    };
-//
-//    self.context[@"handleFetchDefault"] = ^(JSValue *jsRequestId, JSValue *response) {
-//        NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
-//        [formatter setNumberStyle:NSNumberFormatterDecimalStyle];
-//        NSNumber *requestId = [formatter numberFromString:[jsRequestId toString]];
-//        FetchInterceptorProtocol *interceptor = (FetchInterceptorProtocol *)[weakSelf.requestDelegates objectForKey:requestId];
-//        [weakSelf.requestDelegates removeObjectForKey:requestId];
-//        [interceptor passThrough];
-//    };
-//
-//    self.context[@"handleTrueFetch"] = ^(JSValue *method, JSValue *resourceUrl, JSValue *headers, JSValue *resolve, JSValue *reject) {
-//        NSString *resourceUrlString = [resourceUrl toString];
-//
-//        NSLog(@"handleTrueFetch: %@", resourceUrlString);
-//        NSFileManager *fileManager = [NSFileManager defaultManager];
-//        NSString *internalUrlString = [resourceUrl toString];
-//
-//
-//        if (![[resourceUrl toString] containsString:@"://"]) {
-//            internalUrlString = [NSString stringWithFormat:@"/%@/www/%@", [[NSBundle mainBundle] resourcePath], resourceUrlString];
-//            if (![fileManager fileExistsAtPath:internalUrlString]) {
-//                resourceUrlString = [NSString stringWithFormat:@"%@%@", clientUrl, resourceUrlString];
-//                NSLog(@"File roes not exist in local fs. Requesting remotely from: %@", resourceUrlString);
-//            } else {
-//                resourceUrlString = [NSString stringWithFormat:@"file://%@/www/%@", [[NSBundle mainBundle] resourcePath], resourceUrlString];
-//            }
-//        }
-//
-//        // Create the request.
-//        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:resourceUrlString]];
-//        [request setHTTPMethod:[method toString]];
-//        JSValue *jsHeaderDictionary = [headers valueForProperty:@"headerDict"];
-//        NSDictionary *headerDictionary = [jsHeaderDictionary toDictionary];
-//        if (headerDictionary != nil) {
-//            if ([NSThread isMainThread]) {
-//                [headerDictionary enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *value, BOOL* stop) {
-//                    [request addValue:value forHTTPHeaderField:key];
-//                }];
-//            } else {
-//                [NSThread performSelectorOnMainThread:@selector(enumerateKeysAndObjectsUsingBlock:) withObject:^(NSString *key, NSString *value, BOOL* stop) {
-//                    [request addValue:value forHTTPHeaderField:key];
-//                } waitUntilDone:NO];
-//            }
-//        };
-//
-//
-//        [NSURLProtocol setProperty:@YES forKey:@"PureFetch" inRequest:request];
-//
-//
-//
-//        // Create a connection and send the request.
-//        FetchConnectionDelegate *delegate = [FetchConnectionDelegate new];
-//        delegate.resolve = ^(ServiceWorkerResponse *response) {
-//            NSDictionary *responseDict = [response toDictionary];
-//            JSValue *responseValue = [JSValue valueWithObject: responseDict inContext: myContext];
-//            NSArray *arguments = @[responseValue];
-//            NSLog(@"Fetch complete with status (%@): %@", [response status], resourceUrlString);
-//            if ([NSThread isMainThread]) {
-//                [resolve callWithArguments:arguments];
-//            } else {
-//                [resolve performSelectorOnMainThread:@selector(callWithArguments:) withObject:arguments waitUntilDone:NO];
-//            }
-//        };
-//        delegate.reject = ^(NSError *error) {
-//            JSValue *jsError = [JSValue valueWithObject: error inContext: myContext];
-//            NSArray *arguments = @[jsError];
-//            NSLog(@"Fetch failed: ", resourceUrlString);
-//            if ([NSThread isMainThread]) {
-//                [resolve callWithArguments:arguments];
-//            } else {
-//                [resolve performSelectorOnMainThread:@selector(callWithArguments:) withObject:arguments waitUntilDone:NO];
-//            }
-//        };
-//        [NSURLConnection connectionWithRequest:request delegate:delegate];
-//    };
-//
-//    // This function is called by `postMessage`, defined in message.js.
-//    // `postMessage` serializes the message using kamino.js and passes it here.
-//    self.context[@"postMessageInternal"] = ^(JSValue *serializedMessage) {
-//        NSString *postMessageCode = [NSString stringWithFormat:@"window.postMessage(Kamino.parse('%@'), '*')", [serializedMessage toString]];
-//        [weakSelf.webView performSelectorOnMainThread:@selector(stringByEvaluatingJavaScriptFromString:) withObject:postMessageCode waitUntilDone:NO];
-//    };
-
    NSString *originalLoader = [self readScriptAtRelativePath:@"www/load_sw.js"];
    NSString *processedLoader = [originalLoader stringByReplacingOccurrencesOfString:@"{{SERVICE_WORKER_PATH}}" withString:script];
    [self loadScript:processedLoader];
-//    NSString *swScript = [self readScriptAtRelativePath:@"www/sw.js"];
-//    [self loadScript:swScript];
 }
 
 - (void)createServiceWorkerClientWithUrl:(NSString *)url

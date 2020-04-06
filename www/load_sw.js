@@ -5,3 +5,4 @@ polyfillIsReady.then(function () {
     el.setAttribute("src", src);
     head.appendChild(el);
 });
+''; //prevents warning when running script from CDVServiceWorker.m

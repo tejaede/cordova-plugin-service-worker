@@ -145,3 +145,13 @@ FireActivateEvent = function() {
   }
 };
 
+
+installServiceWorkerCallback = function () {
+  cordovaExec("installServiceWorkerCallback", {}, function () {
+  });
+};
+
+activateServiceWorkerCallback = function () {
+  cordovaExec("activateServiceWorkerCallback", {}, function () {
+  });
+};

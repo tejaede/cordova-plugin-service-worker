@@ -8,6 +8,7 @@
     <keywords>cordova,serviceworker,service,worker</keywords>
 
     <dependency id="es6-promise-plugin" url="https://github.com/vstirbu/PromisesPlugin.git" />
+    <dependency id="cordova-plugin-network-information" />
 
     <hook type="after_plugin_install" src="scripts/after-plugin-install.js" />
     <hook type="after_prepare" src="scripts/after-plugin-install.js" />
@@ -25,6 +26,18 @@
     <js-module src="www/kamino.js" name="kamino.js">
         <clobbers target="Kamino" />
     </js-module>
+    <js-module src="www/SyncManager.js" name="SyncManager">
+	<clobbers target="SyncManager" />
+    </js-module>
+    <js-module src="www/PeriodicSyncManager.js" name="PeriodicSyncManager">
+	<clobbers target="PeriodicSyncManager" />
+    </js-module>
+    <js-module src="www/SyncRegistration.js" name="SyncRegistration">
+	<clobbers target="SyncRegistration" />
+    </js-module>
+    <js-module src="www/PeriodicSyncRegistration.js" name="PeriodicSyncRegistration">
+	<clobbers target="PeriodicSyncRegistration" />
+    </js-module>
 
     <!-- Assets for use by the worker (worker env) -->
     <!-- These should be listed AS-IS in load_sw_assets.js -->
@@ -35,6 +48,11 @@
     <asset src="www/sw_assets/kamino.js" target="sw_assets/kamino.js" />
     <asset src="www/sw_assets/message.js" target="sw_assets/message.js" />
     <asset src="www/sw_assets/import-scripts.js" target="sw_assets/import-scripts.js" />
+    <asset src="www/sw_assets/syncevents.js" target="sw_assets/syncevents.js" />
+    <asset src="www/SyncManager.js" target="sw_assets/SyncManager.js" />
+    <asset src="www/PeriodicSyncManager.js" target="sw_assets/PeriodicSyncManager.js" />
+    <asset src="www/SyncRegistration.js" target="sw_assets/SyncRegistration.js" />
+    <asset src="www/PeriodicSyncRegistration.js" target="sw_assets/PeriodicSyncRegistration.js" />
 
     <platform name="ios">
         <config-file target="config.xml" parent="/*">
@@ -42,25 +60,30 @@
                 <param name="ios-package" value="CDVServiceWorker" />
                 <param name="onload" value="true" />
             </feature>
+            <feature name="BackgroundSync">
+		        <param name="ios-package" value="CDVBackgroundSync" />
+	        </feature>
         </config-file>
+        <config-file target="*-Info.plist" parent="UIBackgroundModes">
+            <array>
+            <string>fetch</string>
+            </array>
+        </config-file>
+        <source-file src="src/ios/CDVBackgroundSync.h" />
+	    <source-file src="src/ios/CDVBackgroundSync.m" />
         <header-file src="src/ios/CDVServiceWorker.h" />
         <source-file src="src/ios/CDVServiceWorker.m" />
         <header-file src="src/ios/FetchConnectionDelegate.h" />
         <source-file src="src/ios/FetchConnectionDelegate.m" />
         <header-file src="src/ios/FetchInterceptorProtocol.h" />
         <source-file src="src/ios/FetchInterceptorProtocol.m" />
-        <header-file src="src/ios/ServiceWorkerCache.h" />
-        <source-file src="src/ios/ServiceWorkerCache.m" />
-        <header-file src="src/ios/ServiceWorkerCacheApi.h" />
-        <source-file src="src/ios/ServiceWorkerCacheApi.m" />
-        <header-file src="src/ios/ServiceWorkerCacheEntry.h" />
-        <source-file src="src/ios/ServiceWorkerCacheEntry.m" />
         <header-file src="src/ios/ServiceWorkerRequest.h" />
         <source-file src="src/ios/ServiceWorkerRequest.m" />
         <header-file src="src/ios/ServiceWorkerResponse.h" />
         <source-file src="src/ios/ServiceWorkerResponse.m" />
         <framework src="JavaScriptCore.framework" />
         <framework src="CoreData.framework" />
+        <framework src="SystemConfiguration.framework" />
     </platform>
 
 </plugin>
