@@ -29,9 +29,9 @@ static int64_t requestCount = 0;
 
 + (BOOL)canInitWithRequest:(NSURLRequest *)request {
     // We don't want to intercept any requests for the worker page.
-    if ([[[request URL] absoluteString] hasSuffix:@"GeneratedWorker.html"]) {
+    if ([[[request URL] absoluteString] hasSuffix:@"sw.html"]) {
         return NO;
-    }    
+    }
     
     // Check - is there a service worker for this request?
     // For now, assume YES -- all requests go through service worker. This may be incorrect if there are iframes present.
@@ -42,7 +42,7 @@ static int64_t requestCount = 0;
         // Fetching directly; bypass ServiceWorker.
         return NO;
     } else if ([request valueForHTTPHeaderField:@"x-import-scripts"] != nil){
-        NSLog(@"canInitWithRequest IMPORT %@",   [[request URL] absoluteString]);
+        NSLog(@"Import Script %@",   [[request URL] absoluteString]);
         return NO;
     } else if ([CDVServiceWorker instanceForRequest:request]) {
         // Handling

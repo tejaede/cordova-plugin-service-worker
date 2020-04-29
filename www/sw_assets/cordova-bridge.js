@@ -21,12 +21,16 @@
     };
 
     window.cordovaCallback = function (messageId, parameters, error) {
-        var callback = messages[messageId];
-        console.log("cordovaCallback", messageId, parameters, error);
-        if (callback) {
-            callback(parameters, error);
-            delete messages[messageId];
-        }
+//        setTimeout(function () {
+            var callback = messages[messageId];
+            try {
+                if (callback) {
+                    callback(parameters, error);
+                    delete messages[messageId];
+                }
+            } catch (e) {
+                console.error(e);
+            }
+//        }, 0);
     };
 })();
-

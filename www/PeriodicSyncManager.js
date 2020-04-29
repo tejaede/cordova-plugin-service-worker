@@ -57,7 +57,13 @@ PeriodicSyncManager.prototype.getRegistration = function(tag) {
 	if (typeof cordova !== 'undefined') {
 	    cordova.exec(success, reject, 'BackgroundSync', 'getRegistration', [tag, 'periodic']);
 	} else {
-	    CDVBackgroundSync_getRegistration(tag, 'periodic', success, reject);
+		cordovaExec("getSyncRegistration", {type: "periodic", tag: tag}, function (data, error) {
+			if (error) {
+				reject(error);
+			} else {
+				resolve(data);
+			}
+		});
 	}
     });
 };
@@ -72,7 +78,13 @@ PeriodicSyncManager.prototype.getRegistrations = function() {
 	    // getRegistrations does not fail, it returns an empty array when there are no registrations
 	    cordova.exec(callback, null, 'BackgroundSync', 'getRegistrations', ['periodic']);
 	} else {
-	    CDVBackgroundSync_getRegistrations('periodic', callback);
+		cordovaExec("getSyncRegistrations", {type: "periodic"}, function (data, error) {
+			if (error) {
+				reject(error);
+			} else {
+				callback(data);
+			}
+		});
 	}
     });
 };

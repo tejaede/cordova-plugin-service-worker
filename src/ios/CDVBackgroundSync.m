@@ -46,6 +46,8 @@ static CDVBackgroundSync *backgroundSync;
 @synthesize completionHandler;
 @synthesize registrationList;
 @synthesize periodicRegistrationList;
+@synthesize scriptRunner;
+
 
 -(void)restoreRegistrations
 {
@@ -61,13 +63,7 @@ static CDVBackgroundSync *backgroundSync;
 - (void)pluginInitialize
 {
     [self restoreRegistrations];
-    [self setupSyncResponse];
-    [self setupPeriodicSyncResponse];
-    [self setupUnregister];
     [self setupBackgroundFetchHandler];
-    [self setupServiceWorkerRegister];
-    [self setupServiceWorkerGetRegistrations];
-    [self setupServiceWorkerGetRegistration];
     //Get Min Possible Period setting
     minPossiblePeriod = [[[self commandDelegate] settings][MIN_POSSIBLE_PERIOD] integerValue];
     minPossiblePeriod = minPossiblePeriod > 1000 ? minPossiblePeriod : 1000*60*60; // If no minPossible period is given, set the default to one hour
@@ -142,20 +138,6 @@ static CDVBackgroundSync *backgroundSync;
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
 
-- (void)setupServiceWorkerRegister
-{
-    __weak CDVBackgroundSync* weakSelf = self;
-//    serviceWorker.context[@"CDVBackgroundSync_register"] = ^(JSValue *registration, JSValue *syncType, JSValue *successCallback, JSValue *failureCallback) {
-//        if ([[syncType toString] isEqualToString:@"periodic"] && [[registration toDictionary][@"minPeriod"] integerValue] < minPossiblePeriod) {
-//            [failureCallback callWithArguments:nil];
-//            return;
-//        }
-//        NSMutableDictionary *list = [[syncType toString] isEqualToString:@"periodic"] ? weakSelf.periodicRegistrationList : weakSelf.registrationList;
-//        [weakSelf register:[registration toDictionary] inList:&list];
-//        [successCallback callWithArguments:nil];
-//    };
-}
-
 - (void) registerSync:(NSDictionary *) registration withType:(NSString *)type {
         if ([type isEqualToString:@"periodic"] && [[registration valueForKey:@"minPeriod"] integerValue] < minPossiblePeriod) {
             return;
@@ -197,17 +179,8 @@ static CDVBackgroundSync *backgroundSync;
     }
 }
 
-- (void)setupServiceWorkerGetRegistrations
-{
-    __weak CDVBackgroundSync* weakSelf = self;
-//    serviceWorker.context[@"CDVBackgroundSync_getRegistrations"] = ^(JSValue *syncType, JSValue *callback) {
-//        NSMutableDictionary *list = [[syncType toString] isEqualToString:@"periodic"] ? weakSelf.periodicRegistrationList : weakSelf.registrationList;
-//        if (list != nil && [list count]) {
-//            [callback callWithArguments:@[[list allValues]]];
-//        } else {
-//            [callback callWithArguments:@[@[]]];
-//        }
-//    };
+- (NSMutableDictionary *)getRegistrationsOfType:(NSString *) type {
+    return [type isEqualToString:@"periodic"] ? periodicRegistrationList : registrationList;
 }
 
 - (void)getRegistration:(CDVInvokedUrlCommand*)command
@@ -223,36 +196,29 @@ static CDVBackgroundSync *backgroundSync;
     }
 }
 
-- (void)setupServiceWorkerGetRegistration
+- (NSDictionary *)getRegistrationOfType:(NSString *)type andTag: (NSString *) tag
 {
-    __weak CDVBackgroundSync* weakSelf = self;
-//    serviceWorker.context[@"CDVBackgroundSync_getRegistration"] = ^(JSValue *tag, JSValue* syncType, JSValue *successCallback, JSValue *failureCallback) {
-//        NSMutableDictionary *list = [[syncType toString] isEqualToString:@"periodic"] ? weakSelf.periodicRegistrationList : weakSelf.registrationList;
-//        if (list[[tag toString]]) {
-//            [successCallback callWithArguments:@[list[[tag toString]]]];
-//        } else {
-//            [failureCallback callWithArguments:@[@"Could not find %@", [tag toString]]];
-//        }
-//    };
+    NSMutableDictionary *list = [type isEqualToString:@"periodic"] ? periodicRegistrationList : registrationList;
+    NSDictionary *entry = [list  valueForKey:tag];
+    if (entry != nil) {
+        return entry;
+    } else {
+        return nil;
+    }
 }
 
-- (void)setupUnregister
-{
-    __weak CDVBackgroundSync* weakSelf = self;
-    
-    // Set up service worker unregister event
-//    serviceWorker.context[@"CDVBackgroundSync_unregisterSync"] = ^(JSValue *tag, JSValue *syncType) {
-//        NSMutableDictionary *list = [[syncType toString] isEqualToString:@"periodic"] ? weakSelf.periodicRegistrationList : weakSelf.registrationList;
-//        [weakSelf unregisterSyncByTag:[tag toString] fromRegistrationList:list];
-//
-//    };
-}
 
 - (void)unregister:(CDVInvokedUrlCommand*)command
 {
     NSMutableDictionary *list = [[command argumentAtIndex:1] isEqualToString:@"periodic"] ? periodicRegistrationList : registrationList;
     CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:[self unregisterSyncByTag:[command argumentAtIndex:0] fromRegistrationList:list]];
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+}
+
+- (BOOL)unregisterSyncByTag:(NSString*)tag withType:(NSString*)type
+{
+    NSMutableDictionary *list = [type isEqualToString:@"periodic"] ? periodicRegistrationList : registrationList;
+    return [self unregisterSyncByTag:tag fromRegistrationList: list];
 }
 
 - (BOOL)unregisterSyncByTag:(NSString*)tag fromRegistrationList:(NSMutableDictionary*)list
@@ -283,104 +249,89 @@ static CDVBackgroundSync *backgroundSync;
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
 
-- (void)setupSyncResponse
-{
-    //create weak reference to self in order to prevent retain cycle in block
-    __weak CDVBackgroundSync* weakSelf = self;
-    
-    //Indicate to OS success or failure and unregister syncs that have been successfully executed and are not periodic
-//    serviceWorker.context[@"sendSyncResponse"] = ^(JSValue *responseType, JSValue *jsTag) {
-//        NSString *tag = [jsTag toString];
-//        [CDVBackgroundSync validateTag:&tag];
-//        completedSyncs++;
-//        switch ([responseType toInt32]) {
-//            case 0:
-//                if (fetchResult != UIBackgroundFetchResultFailed) {
-//                    fetchResult = UIBackgroundFetchResultNewData;
-//                }
-//                [weakSelf unregisterSyncByTag:tag fromRegistrationList:weakSelf.registrationList];
-//                break;
-//            case 2:
-//                NSLog(@"Failed to get data");
-//                fetchResult = UIBackgroundFetchResultFailed;
-//            default:
-//                // Push back the failed registration
-//                if (![weakSelf.periodicRegistrationList count]) {
-//                    [weakSelf performSelector:@selector(foregroundSync) withObject:nil afterDelay:pushback/1000];
-//                }
-//                break;
-//        }
-//        if (completedSyncs == dispatchedSyncs) {
-//            // Reset the sync count
-//            completedSyncs = 0;
-//            dispatchedSyncs = 0;
-//            fetchResult = UIBackgroundFetchResultNoData;
-//
-//            //If we have no more registrations left, turn off background fetch
-//            if (![weakSelf.registrationList count] && ![weakSelf.periodicRegistrationList count]) {
-//                [[UIApplication sharedApplication] setMinimumBackgroundFetchInterval:UIApplicationBackgroundFetchIntervalNever];
-//            }
-//            if (weakSelf.completionHandler != nil) {
-//                NSLog(@"Executing Completion Handler");
-//                weakSelf.completionHandler(fetchResult);
-//                weakSelf.completionHandler = nil;
-//            }
-//        }
-//
-//    };
+- (void) sendSyncResponse:(NSNumber *) responseType forTag:(NSString *)tag {
+        [CDVBackgroundSync validateTag:&tag];
+        completedSyncs++;
+        NSLog(@"CDVBackgroundSync.sendSyncResponse %@ %@", responseType, tag);
+        switch ([responseType integerValue]) {
+            case 0:
+                if (fetchResult != UIBackgroundFetchResultFailed) {
+                    fetchResult = UIBackgroundFetchResultNewData;
+                }
+                [self unregisterSyncByTag:tag fromRegistrationList:self.registrationList];
+                break;
+            case 2:
+                NSLog(@"Failed to get data");
+                fetchResult = UIBackgroundFetchResultFailed;
+            default:
+                // Push back the failed registration
+                if (![self.periodicRegistrationList count]) {
+                    [self performSelector:@selector(foregroundSync) withObject:nil afterDelay:pushback/1000];
+                }
+                break;
+        }
+        if (completedSyncs == dispatchedSyncs) {
+            // Reset the sync count
+            completedSyncs = 0;
+            dispatchedSyncs = 0;
+            fetchResult = UIBackgroundFetchResultNoData;
+
+            //If we have no more registrations left, turn off background fetch
+            if (![self.registrationList count] && ![self.periodicRegistrationList count]) {
+                [[UIApplication sharedApplication] setMinimumBackgroundFetchInterval:UIApplicationBackgroundFetchIntervalNever];
+            }
+            if (self.completionHandler != nil) {
+                NSLog(@"Executing Completion Handler");
+                self.completionHandler(fetchResult);
+                self.completionHandler = nil;
+            }
+        }
 }
 
-- (void)setupPeriodicSyncResponse
-{
-    //create weak reference to self in order to prevent retain cycle in block
-    __weak CDVBackgroundSync* weakSelf = self;
-    
-    //Indicate to OS success or failure and unregister syncs that have been successfully executed and are not periodic
-//    serviceWorker.context[@"sendPeriodicSyncResponse"] = ^(JSValue *responseType, JSValue *jsTag) {
-//        NSString *tag = [jsTag toString];
-//        [CDVBackgroundSync validateTag:&tag];
-//        completedSyncs++;
-//        switch ([responseType toInt32]) {
-//            case 0:
-//                if (fetchResult != UIBackgroundFetchResultFailed) {
-//                    fetchResult = UIBackgroundFetchResultNewData;
-//                }
-//                //Reschedule the sync by retimestamping
-//                weakSelf.periodicRegistrationList[tag][@"_timestamp"] = @([NSDate date].timeIntervalSince1970 * 1000);
-//                break;
-//            case 2:
-//                NSLog(@"Failed to get data");
-//                fetchResult = UIBackgroundFetchResultFailed;
-//            default:
-//                // Pushback failed sync by retimestamping with not current time, but with original timestamp + pushback time
-//                weakSelf.periodicRegistrationList[tag][@"_timestamp"] = @([weakSelf.periodicRegistrationList[tag][@"_timestamp"] integerValue] + pushback);
-//                break;
-//        }
-//
-//        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-//        [defaults setObject:weakSelf.periodicRegistrationList forKey:PERIODIC_REGISTRATION_LIST_STORAGE_KEY];
-//
-//        // Make sure we received all the syncs before determining completion
-//        if (completedSyncs == dispatchedSyncs) {
-//            // Reset the sync count
-//            completedSyncs = 0;
-//            dispatchedSyncs = 0;
-//
-//            fetchResult = UIBackgroundFetchResultNoData;
-//
-//            //If we have no more registrations left, turn off background fetch
-//            if (![weakSelf.registrationList count] && ![weakSelf.periodicRegistrationList count]) {
-//                [[UIApplication sharedApplication] setMinimumBackgroundFetchInterval:UIApplicationBackgroundFetchIntervalNever];
-//            }
-//            [weakSelf scheduleSync];
-//            NSLog(@"Rescheduling %@", tag);
-//            if (weakSelf.completionHandler != nil) {
-//                NSLog(@"Executing Completion Handler");
-//                weakSelf.completionHandler(fetchResult);
-//                weakSelf.completionHandler = nil;
-//            }
-//        }
-//    };
+- (void) sendPeriodicSyncResponse:(NSNumber *) responseType forTag:(NSString *)tag {
+        [CDVBackgroundSync validateTag:&tag];
+        completedSyncs++;
+        NSLog(@"CDVBackgroundSync.sendPeriodicSyncResponse %@ %@", responseType, tag);
+        switch ([responseType integerValue]) {
+            case 0:
+                if (fetchResult != UIBackgroundFetchResultFailed) {
+                    fetchResult = UIBackgroundFetchResultNewData;
+                }
+                //Reschedule the sync by retimestamping
+                self.periodicRegistrationList[tag][@"_timestamp"] = @([NSDate date].timeIntervalSince1970 * 1000);
+                break;
+            case 2:
+                NSLog(@"Failed to get data");
+                fetchResult = UIBackgroundFetchResultFailed;
+            default:
+                // Pushback failed sync by retimestamping with not current time, but with original timestamp + pushback time
+                self.periodicRegistrationList[tag][@"_timestamp"] = @([self.periodicRegistrationList[tag][@"_timestamp"] integerValue] + pushback);
+                break;
+        }
+
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:self.periodicRegistrationList forKey:PERIODIC_REGISTRATION_LIST_STORAGE_KEY];
+
+        // Make sure we received all the syncs before determining completion
+        if (completedSyncs == dispatchedSyncs) {
+            // Reset the sync count
+            completedSyncs = 0;
+            dispatchedSyncs = 0;
+
+            fetchResult = UIBackgroundFetchResultNoData;
+
+            //If we have no more registrations left, turn off background fetch
+            if (![self.registrationList count] && ![self.periodicRegistrationList count]) {
+                [[UIApplication sharedApplication] setMinimumBackgroundFetchInterval:UIApplicationBackgroundFetchIntervalNever];
+            }
+            [self scheduleSync];
+            NSLog(@"Rescheduling %@", tag);
+            if (self.completionHandler != nil) {
+                NSLog(@"Executing Completion Handler");
+                self.completionHandler(fetchResult);
+                self.completionHandler = nil;
+            }
+        }
 }
 
 - (void)networkCheckCallback
@@ -425,6 +376,7 @@ static CDVBackgroundSync *backgroundSync;
 }
 
 - (void)application:(UIApplication*)application performFetchWithCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler{
+    NSLog(@"performFetchWithCompletionHandler");
     backgroundSync.completionHandler = completionHandler;
     [backgroundSync evaluateSyncs];
 }
@@ -443,8 +395,10 @@ static CDVBackgroundSync *backgroundSync;
     NSError *error;
     NSData *json = [NSJSONSerialization dataWithJSONObject:registration options:0 error:&error];
     NSString *dispatchCode = [NSString stringWithFormat:@"FireSyncEvent(%@);", [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
-//    [serviceWorker.context performSelectorOnMainThread:@selector(evaluateScript:) withObject:dispatchCode waitUntilDone:NO];
+    
+    [self.scriptRunner evaluateScript:dispatchCode];
 }
+
 
 - (void)evaluatePeriodicSyncRegistrations
 {
@@ -472,7 +426,7 @@ static CDVBackgroundSync *backgroundSync;
     NSError *error;
     NSData *json = [NSJSONSerialization dataWithJSONObject:registration options:0 error:&error];
     NSString *dispatchCode = [NSString stringWithFormat:@"FirePeriodicSyncEvent(%@);", [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
-//    [serviceWorker.context performSelectorOnMainThread:@selector(evaluateScript:) withObject:dispatchCode waitUntilDone:NO];
+    [self.scriptRunner evaluateScript:dispatchCode];
 }
 
 - (NSInteger)getNetworkStatus

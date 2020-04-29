@@ -61,7 +61,12 @@
         NSLog(@"Failed to convert ServiceWorkerResponseToDictionary because response.url is nil");
         return nil;
     } else {
-        NSString *encodedBody = [self.body base64EncodedStringWithOptions: 0];
+        NSString *encodedBody;
+        if ([self.url hasSuffix:@".js"]) {
+            encodedBody = [[NSString alloc] initWithData:self.body encoding:NSUTF8StringEncoding];
+        } else {
+            encodedBody = [self.body base64EncodedStringWithOptions: 0];
+        }
         return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new]] forKeys:@[@"url", @"body", @"status", @"headers"]];
     }
 }

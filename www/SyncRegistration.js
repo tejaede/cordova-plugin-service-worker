@@ -32,7 +32,13 @@ SyncRegistration.prototype.unregister = function() {
 	if (typeof cordova !== 'undefined') {
 	    cordova.exec(resolve, null, 'BackgroundSync', 'unregister', [tag]);
 	} else {
-	    CDVBackgroundSync_unregisterSync(tag, 'one-off');
+        cordovaExec("unregisterSync", {type: "periodic", tag: tag}, function (data, error) {
+            if (error) {
+                reject(error);
+            } else {
+                resolve(data);
+            }
+        });
 	}
     });
 };

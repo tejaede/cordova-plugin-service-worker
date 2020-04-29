@@ -40,7 +40,7 @@ extern NSString * const REGISTRATION_KEY_WAITING;
 extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 
 //@interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
-@interface CDVServiceWorker : CDVPlugin <WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler> {}
+@interface CDVServiceWorker : CDVPlugin <WKUIDelegate, CDVJavaScriptEvaluator, WKNavigationDelegate, WKScriptMessageHandler> {}
 
 + (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request;
 + (CDVServiceWorker *)getSingletonInstance;

@@ -19,17 +19,30 @@
 
 #import <Cordova/CDV.h>
 #import "CDVConnection.h"
+#import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <objc/runtime.h>
+
+@protocol CDVJavaScriptEvaluator
+
+- (void)evaluateScript:(NSString *)script;
+
+@end
 
 @interface CDVBackgroundSync : CDVPlugin {}
 
 typedef void(^Completion)(UIBackgroundFetchResult);
 
 - (void) registerSync:(NSDictionary *) registration withType:(NSString *)type;
+- (void) sendPeriodicSyncResponse:(NSNumber *) responseType forTag:(NSString *)tag;
+- (void) sendSyncResponse:(NSNumber *) responseType forTag:(NSString *)tag;
+- (BOOL) unregisterSyncByTag:(NSString *) tag withType:(NSString *)type;
+- (NSMutableDictionary *) getRegistrationsOfType:(NSString *) type;
+- (NSDictionary *)getRegistrationOfType:(NSString *)type andTag: (NSString *) tag;
 
 @property (nonatomic, copy) NSString *syncCheckCallback;
 @property (nonatomic, copy) Completion completionHandler;
 @property (nonatomic, strong) NSMutableDictionary *registrationList;
 @property (nonatomic, strong) NSMutableDictionary *periodicRegistrationList;
+@property (strong) id <CDVJavaScriptEvaluator> scriptRunner;
 @end

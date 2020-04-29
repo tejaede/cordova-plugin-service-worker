@@ -1,10 +1,18 @@
 EventQueue = {};
 var self=this;
 
-Event = function(type) {
+Event = function Event(type) {
   this.type = type;
   this.cancelable = true;
-
+    Object.defineProperty(this, "bubbles", {
+        value: true,
+        writable: true
+    });
+    Object.defineProperty(this, "target", {
+        value: undefined,
+        writable: true
+    });
+//  this.bubbles = true;
   this.stopPropagation_ = false;
   this.stopImmediatePropagation_ = false;
   this.canceled_ = false;
@@ -18,6 +26,14 @@ Event.prototype.preventDefault = function() {
   }
 };
 
+Event.prototype.waitUntil = function(promise) {
+  if (this._promises === null) {
+    this._promises = [];
+  }
+  this._promises.push(promise);
+};
+
+
 ExtendableEvent = function(type) {
   Event.call(this, type);
   this._promises = null;
@@ -25,6 +41,8 @@ ExtendableEvent = function(type) {
 
 ExtendableEvent.prototype = Object.create(Event.prototype);
 ExtendableEvent.constructor = ExtendableEvent;
+
+
 
 ExtendableEvent.prototype.waitUntil = function(promise) {
   if (this._promises === null) {
@@ -34,8 +52,15 @@ ExtendableEvent.prototype.waitUntil = function(promise) {
 };
 
 
+var startupEvents = {
+    install: false,
+    activate: false
+};
 //originalAddEventListener = addEventListener;
 addEventListener = function(eventName, callback) {
+    if (startupEvents[eventName]) {
+        callback(startupEvents[eventName]);
+    }
 //  if (eventName == 'message') {
 //    originalEventListener.apply(self, arguments);
 //  } else {
@@ -46,6 +71,9 @@ addEventListener = function(eventName, callback) {
 };
 
 dispatchEvent = function(event) {
+    if (startupEvents.hasOwnProperty(event.type)) {
+        startupEvents[event.type] = event;
+    }
   (EventQueue[event.type] || []).forEach(function(handler) {
     if (typeof handler === 'function') {
       handler.call(self, event);

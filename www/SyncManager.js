@@ -28,7 +28,16 @@ SyncManager.prototype.register = function(syncRegistrationOptions) {
 	    // register does not dispatch an error
 	    cordova.exec(callback, null, 'BackgroundSync', 'cordovaRegister', [new SyncRegistration(syncRegistrationOptions)]);
 	} else {
-	    CDVBackgroundSync_register(new SyncRegistration(syncRegistrationOptions), 'one-off', callback, null);
+	    cordovaExec("registerSync", {
+            type: "one-off",
+            registration: new SyncRegistration(syncRegistrationOptions)
+        }, function (error) {
+            if (!error) {
+                callback();
+            } else {
+                reject(error);
+            }
+        })
 	}
     });
 };
@@ -42,7 +51,14 @@ SyncManager.prototype.getRegistration = function(tag) {
 	if (typeof cordova !== 'undefined') {
 	    cordova.exec(success, reject, 'BackgroundSync', 'getRegistration', [tag]);
 	} else {
-	    CDVBackgroundSync_getRegistration(tag, 'one-off', success, reject);
+		cordovaExec("getSyncRegistration", {type: "one-off", tag: tag}, function (data, error) {
+			if (error) {
+				reject(error);
+			} else {
+				
+				resolve(data);
+			}
+		});
 	}
     });
 };
@@ -57,7 +73,13 @@ SyncManager.prototype.getRegistrations = function() {
 	    // getRegistrations does not fail, it returns an empty array when there are no registrations
 	    cordova.exec(callback, null, 'BackgroundSync', 'getRegistrations', []);
 	} else {
-	    CDVBackgroundSync_getRegistrations('one-off', callback);
+		cordovaExec("getSyncRegistrations", {type: "one-off"}, function (data, error) {
+			if (error) {
+				reject(error);
+			} else {
+				resolve(data);
+			}
+		});
 	}
     });
 };

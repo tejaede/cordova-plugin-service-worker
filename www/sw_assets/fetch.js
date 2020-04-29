@@ -40,7 +40,12 @@ FetchEvent.prototype.respondWith = function (response) {
 
   // Send the response to native.
   var convertAndHandle = function (response) {
-    response.body = window.btoa(response.body);
+      try {
+        response.body = window.btoa(response.body);
+      } catch (e) {
+          console.warn("Failed to decode response body for URL: ", response.url);
+      }
+    
     handleFetchResponse(requestId, response);
   };
 
@@ -93,12 +98,22 @@ Headers.prototype.set = function (name, value) {
   this.headerDict[name] = [value];
 };
 
+Headers.prototype.forEach = function (callback) {
+    var self = this,
+        keys = Object.keys(this.headerDict);
+    keys.forEach(function (key) {
+        callback(self.headerDict[key], key);
+    });
+}
+
 Request = function (url, options) {
   options = options || {};
   this.url = URL.absoluteURLfromMainClient(url);
   this.method = options.method || "GET";
   this.headers = options.headers || new Headers({});
 };
+
+Request.prototype.signal = true;
 
 Request.create = function (method, url, headers) {
   return new Request(url, {
@@ -112,10 +127,22 @@ Request.prototype.clone = function () {
 };
 
 Response = function (body, url, status, headers) {
+
   this.body = body;
   this.url = url;
   this.status = status || 200;
-  this.headers = headers || new Headers({});
+    if (!(headers instanceof Headers)) {
+        this.headers = new Headers();
+        if (headers) {
+            var self = this,
+                keys = Object.keys(headers);
+            keys.forEach(function (key) {
+                self.headers.append(key, headers[key]);
+            });
+        }
+    } else {
+        this.headers = headers;
+    }
 };
 
 Response.prototype.json = function () {
@@ -129,7 +156,15 @@ Response.prototype.json = function () {
     this._json = Promise.resolve(data);
   }
   return this._json || Promise.resolve(null);
-}
+};
+
+Response.prototype.text = function () {
+  if (this.body && !this._text) {
+    this._text = Promise.resolve(this.body);
+  }
+  return this._text || Promise.resolve(null);
+};
+
 
 Response.prototype.clone = function () {
   return new Response(this.body, this.url, this.status, this.headers);
@@ -147,7 +182,9 @@ Response.prototype.toDict = function () {
 var protocolRegexp = /^^(file|https?)\:\/\//;
 URL.absoluteURLfromMainClient = function (url) {
   var baseURL = window.mainClientURL || window.location.href;
-  return protocolRegexp.test(url) ? url : new URL(url, baseURL).toString();
+  url = protocolRegexp.test(url) ? url : new URL(url, baseURL).toString();
+//  return url.replace(protocolRegexp, "cordova-sw://");
+   return url;
 };
 // This function returns a promise with a response for fetching the given resource.
 function fetch(input) {
@@ -173,7 +210,16 @@ function fetch(input) {
   return new Promise(function (innerResolve, reject) {
     // Wrap the resolve callback so we can decode the response body.
     var resolve = function (response) {
-      var jsResponse = new Response(window.atob(response.body), response.url, response.status, response.headers);
+        var body;
+        if (url.endsWith(".js")) {
+            body = response.body;
+        } else {
+            body = window.atob(response.body);
+        }
+      var jsResponse = new Response(body, response.url, response.status, response.headers);
+        if (jsResponse.status < 200 || jsResponse.status >= 400) {
+          console.error("Fetch failed with status (" + jsResponse.status + ") for url: " + jsResponse.url);
+        }
       innerResolve(jsResponse);
     };
 
@@ -181,22 +227,23 @@ function fetch(input) {
     handleTrueFetch(method, url, headers, resolve, reject);
   });
 }
-
 handleTrueFetch = function (method, url, headers, resolve, reject) {
   var message = {
     method: method,
     url: url,
     headers: headers
   };
-  console.log(message);
+
   cordovaExec("trueFetch", message, function (response, error) {
+
     if (error) {
       reject(error);
     } else {
       resolve(response);
     }
   });
-};
+}
+
 
 handleFetchResponse = function (requestId, response) {
   var message = {

@@ -41,6 +41,7 @@ function PeriodicSyncEvent() {
     this.registration = new PeriodicSyncRegistration();
 }
 
+debugger;
 SyncEvent.prototype = Object.create(ExtendableEvent.prototype);
 SyncEvent.constructor = SyncEvent;
 
@@ -49,21 +50,34 @@ PeriodicSyncEvent.constructor = PeriodicSyncEvent;
 
 function FireSyncEvent(data) {
     var ev = new SyncEvent();
+    debugger;
+    ev.target = window;
     ev.registration.tag = data.tag;
     dispatchEvent(ev);
     if(Array.isArray(ev._promises)) {
-	Promise.all(ev._promises).then(function(){
-		sendSyncResponse(0, data.tag);
-	    },function(){
-		sendSyncResponse(2, data.tag);
-	    });
+        Promise.all(ev._promises).then(function() {
+                sendSyncResponse(0, data.tag);
+            }, function(){
+            sendSyncResponse(2, data.tag);
+        });
     } else {
-	sendSyncResponse(1, data.tag);
+	 sendSyncResponse(1, data.tag);
     }
+}
+
+function sendSyncResponse(responseType, tag) {
+    cordovaExec("syncResponse", {type: responseType, tag: tag}, function (data, error) {
+        if (error) {
+            reject(error);
+        } else {
+            resolve(data);
+        }
+    });
 }
 
 function FirePeriodicSyncEvent(data) {
     var ev = new PeriodicSyncEvent();
+    ev.target = window;
     ev.registration.tag = data.tag;
     ev.registration.minPeriod = data.minPeriod;
     ev.registration.networkState = data.networkState;
@@ -78,4 +92,14 @@ function FirePeriodicSyncEvent(data) {
     } else {
 	sendPeriodicSyncResponse(1, data.tag);
     }
+}
+
+function sendPeriodicSyncResponse(responseType, tag) {
+    cordovaExec("periodicSyncResponse", {type: responseType, tag: tag}, function (data, error) {
+        if (error) {
+            reject(error);
+        } else {
+            resolve(data);
+        }
+    });
 }

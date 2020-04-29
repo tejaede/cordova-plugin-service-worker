@@ -41,18 +41,22 @@
 
     <!-- Assets for use by the worker (worker env) -->
     <!-- These should be listed AS-IS in load_sw_assets.js -->
+    <asset src="www/sw_assets/sw.html" target="sw_assets/sw.html" />
     <asset src="www/sw_assets/client.js" target="sw_assets/client.js" />
+    <asset src="www/sw_assets/cordova-bridge.js" target="sw_assets/cordova-bridge.js" />
     <asset src="www/sw_assets/event.js" target="sw_assets/event.js" />
     <asset src="www/sw_assets/fetch.js" target="sw_assets/fetch.js" />
     <asset src="www/sw_assets/cache.js" target="sw_assets/cache.js" />
     <asset src="www/sw_assets/kamino.js" target="sw_assets/kamino.js" />
     <asset src="www/sw_assets/message.js" target="sw_assets/message.js" />
     <asset src="www/sw_assets/import-scripts.js" target="sw_assets/import-scripts.js" />
+    <asset src="www/sw_assets/service_worker_registration.js" target="sw_assets/service_worker_registration.js" />
     <asset src="www/sw_assets/syncevents.js" target="sw_assets/syncevents.js" />
     <asset src="www/SyncManager.js" target="sw_assets/SyncManager.js" />
     <asset src="www/PeriodicSyncManager.js" target="sw_assets/PeriodicSyncManager.js" />
     <asset src="www/SyncRegistration.js" target="sw_assets/SyncRegistration.js" />
     <asset src="www/PeriodicSyncRegistration.js" target="sw_assets/PeriodicSyncRegistration.js" />
+    
 
     <platform name="ios">
         <config-file target="config.xml" parent="/*">
@@ -73,6 +77,8 @@
 	    <source-file src="src/ios/CDVBackgroundSync.m" />
         <header-file src="src/ios/CDVServiceWorker.h" />
         <source-file src="src/ios/CDVServiceWorker.m" />
+        <header-file src="src/ios/CDVSWURLSchemeHandler.h" />
+        <source-file src="src/ios/CDVSWURLSchemeHandler.m" />
         <header-file src="src/ios/FetchConnectionDelegate.h" />
         <source-file src="src/ios/FetchConnectionDelegate.m" />
         <header-file src="src/ios/FetchInterceptorProtocol.h" />

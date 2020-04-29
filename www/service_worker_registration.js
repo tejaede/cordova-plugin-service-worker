@@ -1,6 +1,4 @@
-var exec = require('cordova/exec');
-
-var ServiceWorkerRegistration = function(installing, waiting, active, registeringScriptURL, scope) {
+var ServiceWorkerRegistration = function ServiceWorkerRegistration(installing, waiting, active, registeringScriptURL, scope) {
     this.installing = installing;
     this.waiting = waiting;
     this.active = active;
@@ -11,5 +9,7 @@ var ServiceWorkerRegistration = function(installing, waiting, active, registerin
     // TODO: Update?
 };
 
-module.exports = ServiceWorkerRegistration;
 
+if (typeof cordova !== 'undefined') {
+    module.exports = ServiceWorkerRegistration;
+}

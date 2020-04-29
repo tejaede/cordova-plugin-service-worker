@@ -8,7 +8,6 @@ window.importScripts = importScripts = function importer() {
     // Sync get each URL and return as one string to be eval'd.
     // These requests are done in series. TODO: Possibly solve?
     return urls.map(function(url) {
-
         var absoluteUrl = URL.absoluteURLfromMainClient(url),
             xhr = new XMLHttpRequest();
         xhr.open('GET', absoluteUrl, false);
@@ -16,7 +15,14 @@ window.importScripts = importScripts = function importer() {
         xhr.send(null);
         xhr.status = parseInt(xhr.status, 10);
         if (xhr.status === 200) {
-            globalEval(xhr.responseText);
+//            debugger;
+            try {
+                globalEval(xhr.responseText);
+            } catch (e) {
+                console.error("Faild to evaluate javascript: " + url);
+                console.error(e);
+            }
+            
             return xhr.responseText;
         } else {
             console.log('Status:', xhr.status);
