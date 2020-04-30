@@ -113,6 +113,7 @@ Request = function (url, options) {
   this.headers = options.headers || new Headers({});
 };
 
+//TODO Implement abort
 Request.prototype.signal = true;
 
 Request.create = function (method, url, headers) {
@@ -122,53 +123,14 @@ Request.create = function (method, url, headers) {
   });
 };
 
-Request.prototype.clone = function () {
-  return new Request(this.method, this.url, this.headers);
-};
 
-Response = function (body, url, status, headers) {
-
-  this.body = body;
-  this.url = url;
-  this.status = status || 200;
-    if (!(headers instanceof Headers)) {
-        this.headers = new Headers();
-        if (headers) {
-            var self = this,
-                keys = Object.keys(headers);
-            keys.forEach(function (key) {
-                self.headers.append(key, headers[key]);
-            });
-        }
-    } else {
-        this.headers = headers;
-    }
-};
-
-Response.prototype.json = function () {
-  var data;
-  if (this.body && !this._json) {
-    try {
-      data = JSON.parse(this.body);
-    } catch (e) {
-      data = null;
-    }
-    this._json = Promise.resolve(data);
-  }
-  return this._json || Promise.resolve(null);
-};
-
-Response.prototype.text = function () {
-  if (this.body && !this._text) {
-    this._text = Promise.resolve(this.body);
-  }
-  return this._text || Promise.resolve(null);
-};
-
-
-Response.prototype.clone = function () {
-  return new Response(this.body, this.url, this.status, this.headers);
-};
+function createResponse(body, url, status, headers) {
+    return  new Response(body, {
+        url: url,
+        status: status,
+        headers: headers
+    });
+}
 
 Response.prototype.toDict = function () {
   return {
@@ -183,7 +145,6 @@ var protocolRegexp = /^^(file|https?)\:\/\//;
 URL.absoluteURLfromMainClient = function (url) {
   var baseURL = window.mainClientURL || window.location.href;
   url = protocolRegexp.test(url) ? url : new URL(url, baseURL).toString();
-//  return url.replace(protocolRegexp, "cordova-sw://");
    return url;
 };
 // This function returns a promise with a response for fetching the given resource.
@@ -216,7 +177,7 @@ function fetch(input) {
         } else {
             body = window.atob(response.body);
         }
-      var jsResponse = new Response(body, response.url, response.status, response.headers);
+      var jsResponse = new createResponse(body, response.url, response.status, response.headers);
         if (jsResponse.status < 200 || jsResponse.status >= 400) {
           console.error("Fetch failed with status (" + jsResponse.status + ") for url: " + jsResponse.url);
         }

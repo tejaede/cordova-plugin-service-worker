@@ -65,6 +65,7 @@ if (typeof cordova !== "undefined") {
     
     module.exports = ServiceWorkerContainer;
 } else {
+    //TODO implement
     window.skipWaiting = function () {};
     ServiceWorkerContainer = function ServiceWorkerContainer(scriptURL) {
         this.scriptURL = scriptURL;

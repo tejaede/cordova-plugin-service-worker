@@ -4,7 +4,6 @@ window.importScripts = importScripts = function importer() {
     var urls = [].slice.call(arguments).filter(function (arg) {
         return (typeof arg === 'string');
     });
-
     // Sync get each URL and return as one string to be eval'd.
     // These requests are done in series. TODO: Possibly solve?
     return urls.map(function(url) {
@@ -15,7 +14,6 @@ window.importScripts = importScripts = function importer() {
         xhr.send(null);
         xhr.status = parseInt(xhr.status, 10);
         if (xhr.status === 200) {
-//            debugger;
             try {
                 globalEval(xhr.responseText);
             } catch (e) {
@@ -25,9 +23,7 @@ window.importScripts = importScripts = function importer() {
             
             return xhr.responseText;
         } else {
-            console.log('Status:', xhr.status);
-            console.log('URL:', absoluteUrl.toString());
-            throw new Error('Network error while calling importScripts()');
+            throw new Error('Network error while calling importScripts() (code: '+ xhr.status + ", url: " + absoluteUrl + ")");
         }
     });
 };

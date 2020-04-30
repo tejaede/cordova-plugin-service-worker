@@ -21,7 +21,6 @@
     };
 
     window.cordovaCallback = function (messageId, parameters, error) {
-//        setTimeout(function () {
             var callback = messages[messageId];
             try {
                 if (callback) {
@@ -31,6 +30,5 @@
             } catch (e) {
                 console.error(e);
             }
-//        }, 0);
     };
 })();

@@ -4,15 +4,7 @@ var self=this;
 Event = function Event(type) {
   this.type = type;
   this.cancelable = true;
-    Object.defineProperty(this, "bubbles", {
-        value: true,
-        writable: true
-    });
-    Object.defineProperty(this, "target", {
-        value: undefined,
-        writable: true
-    });
-//  this.bubbles = true;
+  this.bubbles = true;
   this.stopPropagation_ = false;
   this.stopImmediatePropagation_ = false;
   this.canceled_ = false;
@@ -42,32 +34,26 @@ ExtendableEvent = function(type) {
 ExtendableEvent.prototype = Object.create(Event.prototype);
 ExtendableEvent.constructor = ExtendableEvent;
 
-
-
-ExtendableEvent.prototype.waitUntil = function(promise) {
-  if (this._promises === null) {
-    this._promises = [];
-  }
-  this._promises.push(promise);
-};
-
-
+/**
+ //TODO
+ It is possible (even likely) for install and activate to be
+ called before the registered service worker has a chance to
+ add it's listeners. For now, this is handled by holding
+ on to the event until the listener is added, but the bootstrap
+ order should eventually be fixed
+ */
 var startupEvents = {
     install: false,
     activate: false
 };
-//originalAddEventListener = addEventListener;
 addEventListener = function(eventName, callback) {
     if (startupEvents[eventName]) {
         callback(startupEvents[eventName]);
     }
-//  if (eventName == 'message') {
-//    originalEventListener.apply(self, arguments);
-//  } else {
-    if (!(eventName in EventQueue))
-      EventQueue[eventName] = [];
+    if (!(eventName in EventQueue)) {
+       EventQueue[eventName] = [];
+    }
     EventQueue[eventName].push(callback);
-//  }
 };
 
 dispatchEvent = function(event) {

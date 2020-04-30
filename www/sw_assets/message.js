@@ -17,4 +17,3 @@ MessageEvent = function(eventInitDict) {
 };
 MessageEvent.prototype = Object.create(Event.prototype);
 MessageEvent.constructor = MessageEvent;
-

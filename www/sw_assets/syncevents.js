@@ -41,7 +41,6 @@ function PeriodicSyncEvent() {
     this.registration = new PeriodicSyncRegistration();
 }
 
-debugger;
 SyncEvent.prototype = Object.create(ExtendableEvent.prototype);
 SyncEvent.constructor = SyncEvent;
 
@@ -50,7 +49,6 @@ PeriodicSyncEvent.constructor = PeriodicSyncEvent;
 
 function FireSyncEvent(data) {
     var ev = new SyncEvent();
-    debugger;
     ev.target = window;
     ev.registration.tag = data.tag;
     dispatchEvent(ev);

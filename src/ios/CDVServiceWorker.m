@@ -389,12 +389,19 @@ CDVServiceWorker * singletonInstance = nil;
         }
     }
 
+
     // Create the request.
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: url]];
     [request setHTTPMethod:method];
     if (headers != nil) {
+        if ([url hasSuffix: @"configuration"]) {
+            NSLog(@"headers for configuration request -- %lu", (unsigned long)[headers count]);
+        }
         if ([NSThread isMainThread]) {
             [headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL* stop) {
+                if ([url hasSuffix: @"configuration"]) {
+                    NSLog(@"AddHeaderForConfigurationRequest -- %@: %@", key, value);
+                }
                 if([value isKindOfClass:[NSArray class]]){
                     value = [value objectAtIndex:0];
                 }
@@ -402,6 +409,9 @@ CDVServiceWorker * singletonInstance = nil;
             }];
         } else {
             [NSThread performSelectorOnMainThread:@selector(enumerateKeysAndObjectsUsingBlock:) withObject:^(NSString *key, NSString *value, BOOL* stop) {
+                if ([url hasSuffix: @"configuration"]) {
+                    NSLog(@"AddHeaderForConfigurationRequest -- %@: %@", key, value);
+                }
                 [request addValue:value forHTTPHeaderField:key];
             } waitUntilDone:NO];
         }
@@ -419,6 +429,9 @@ CDVServiceWorker * singletonInstance = nil;
     delegate.reject = ^(NSError *error) {
         [self sendResultToWorker:messageId parameters: nil withError: error];
     };
+    if ([url hasSuffix: @"configuration"]) {
+        NSLog(@"SendConfigurationRequest");
+    }
     [NSURLConnection connectionWithRequest:request delegate:delegate];
 }
 
@@ -765,11 +778,10 @@ NSString *_clientUrl = nil;
     // Specify the assets directory.
     // TODO: Move assets up one directory, so they're not in www.
     NSString *assetDirectoryPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/www/sw_assets"];
-
-//    NSString *mainResourcePath = [NSString stringWithFormat:@"file:/%@/%@/", [[NSBundle mainBundle] resourcePath], @"www"];
     
     NSString *definePolyfillIsReadyPromise = @"window.polyfillIsReady = new Promise(function (resolve) {window.resolvePolyfillIsReady = resolve });'';";
     [self evaluateScript: definePolyfillIsReadyPromise];
+    
     // Get the list of assets.
     NSArray *assetFilenames = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:assetDirectoryPath error:NULL];
     
@@ -782,9 +794,9 @@ NSString *_clientUrl = nil;
         script = [self readScriptAtRelativePath:relativePath];
         [self evaluateScript:script];
     }
-    for (fileName in assetFilenames) {
+        for (fileName in assetFilenames) {
         if (![rootSWAssetFileNames containsObject:fileName]) {
-            NSLog(@"load supplemental sw asset: %@", fileName);
+            NSLog(@"load supplemental swe asset: %@", fileName);
             relativePath = [NSString stringWithFormat:@"www/sw_assets/%@", fileName];
             script = [self readScriptAtRelativePath:relativePath];
             [self evaluateScript:script];
@@ -794,13 +806,6 @@ NSString *_clientUrl = nil;
     
      NSString *resolvePolyfillIsReadyPromise = @"window.resolvePolyfillIsReady();'';";
      [self evaluateScript: resolvePolyfillIsReadyPromise];
-
-//    NSString *loader = [self readScriptAtRelativePath:@"www/load_sw_assets.js"];
-//
-//    NSString *parsedLoader = [NSString stringWithFormat:loader, mainResourcePath];
-//
-//    [self loadScript:parsedLoader];
-    NSLog(@"Load Service Worker Assets into context");
 }
 
 - (void)loadScript:(NSString *)script

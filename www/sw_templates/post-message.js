@@ -5,4 +5,5 @@ try {
 } catch (e) {
     console.warn("Failed to parse post message");
 }
-dispatchEvent(new MessageEvent({data:message}));'';
+dispatchEvent(new MessageEvent({data:message}));
+''; //Prevents WKWebView evaluateJavascript from throwing warning
