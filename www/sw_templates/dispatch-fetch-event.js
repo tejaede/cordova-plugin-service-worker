@@ -8,3 +8,4 @@ try {
     console.warn(e);
 }
 '';  //Prevents WKWebView evaluateJavascript from throwing warning
+

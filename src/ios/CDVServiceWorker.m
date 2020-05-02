@@ -27,6 +27,7 @@
 #import "ServiceWorkerRequest.h"
 #import "CDVBackgroundSync.h"
 #import "CDVSWURLSchemeHandler.h"
+#import "SWScriptTemplate.h"
 
 static bool isServiceWorkerActive = NO;
 
@@ -47,10 +48,14 @@ NSString * const REGISTRATION_KEY_WAITING = @"waiting";
 
 NSString * const SERVICE_WORKER_KEY_SCRIPT_URL = @"scriptURL";
 
-NSString * const POST_MESSAGE_SCRIPT_TEMPLATE_PATH = @"www/sw_templates/post-message.js";
-NSString * const CREATE_REGISTRATION_SCRIPT_TEMPLATE_PATH = @"www/sw_templates/create-registration.js";
-NSString *postMessageScriptTemplate;
-NSString *createRegistrationScriptTemplate;
+NSString * const DEFAULT_SERVICE_WORKER_SHELL = @"sw.html";
+
+NSString * const SERVICE_WORKER_ASSETS_RELATIVE_PATH = @"www/sw_assets";
+
+
+
+
+
 
 @implementation CDVServiceWorker
 
@@ -122,11 +127,32 @@ CDVServiceWorker * singletonInstance = nil;
     NSLog(@"CDVServiceWorker.onReset");
 }
 
+SWScriptTemplate *cordovaCallbackTemplate;
+SWScriptTemplate *createRegistrationTemplate;
+SWScriptTemplate *definePolyfillIsReadyTemplate;
+SWScriptTemplate *dispatchActivateEventTemplate;
+SWScriptTemplate *dispatchFetchEventTemplate;
+SWScriptTemplate *dispatchInstallEventTemplate;
+SWScriptTemplate *postMessageTemplate;
+SWScriptTemplate *resolvePolyfillIsReadyTemplate;
+
+- (void) initializeScriptTemplates {
+    cordovaCallbackTemplate = [[SWScriptTemplate alloc] initWithFilename:@"cordova-callback.js"];
+    createRegistrationTemplate = [[SWScriptTemplate alloc] initWithFilename:@"create-registration.js"];
+    definePolyfillIsReadyTemplate = [[SWScriptTemplate alloc] initWithFilename:@"define-polyfill-is-ready.js"];
+    dispatchActivateEventTemplate = [[SWScriptTemplate alloc] initWithFilename:@"dispatch-activate-event.js"];
+    dispatchFetchEventTemplate = [[SWScriptTemplate alloc] initWithFilename:@"dispatch-fetch-event.js"];
+    dispatchInstallEventTemplate = [[SWScriptTemplate alloc] initWithFilename:@"dispatch-install-event.js"];
+    postMessageTemplate = [[SWScriptTemplate alloc] initWithFilename:@"post-message.js"];
+    resolvePolyfillIsReadyTemplate = [[SWScriptTemplate alloc] initWithFilename:@"resolve-polyfill-is-ready.js"];
+}
+
 - (void)pluginInitialize
 {
     // TODO: Make this better; probably a registry
     singletonInstance = self;
 
+    [self initializeScriptTemplates];
     self.requestDelegates = [[NSMutableDictionary alloc] initWithCapacity:10];
     self.requestQueue = [NSMutableArray new];
 
@@ -137,7 +163,15 @@ CDVServiceWorker * singletonInstance = nil;
 
 -(void) createNewWorkerWebView {
     
-    //Clear up existing webView
+    CDVViewController *vc = (CDVViewController *)[self viewController];
+    NSMutableDictionary *settings = [vc settings];
+    NSString *applicationURL =  [settings objectForKey:@"remoteapplicationurl"];
+    NSString *serviceWorkerShell =  [settings objectForKey:@"serviceworkershell"];
+    if (serviceWorkerShell == nil) {
+        serviceWorkerShell = DEFAULT_SERVICE_WORKER_SHELL;
+    }
+
+    //Clean up existing webView
     if (self.workerWebView != nil) {
         [self.workerWebView removeFromSuperview];
         self.workerWebView = nil;
@@ -158,18 +192,22 @@ CDVServiceWorker * singletonInstance = nil;
     
     [self.workerWebView setUIDelegate:self];
     [self.workerWebView setNavigationDelegate:self];
-    [self clearBrowserCache];
     
-    NSURL* bundleURL = [NSURL fileURLWithPath:[[NSBundle mainBundle] bundlePath]];
-    NSURL* swShellURL = [bundleURL URLByAppendingPathComponent: @"www/sw_assets/sw.html"];
-    NSString *localURL = [swShellURL absoluteString];
-    NSURL *url = [NSURL URLWithString:@"https://local.pdc.org/~thomas/contour/sw.html"];
-    NSURLRequest *request = [NSURLRequest requestWithURL:url];
-//    [self.workerWebView loadFileURL:swShellURL allowingReadAccessToURL:bundleURL];
-    [self.workerWebView loadRequest:request];
+    NSString *absoluteShellURLString;
+    if (applicationURL != nil) {
+        absoluteShellURLString = [NSString stringWithFormat:@"%@/%@", applicationURL, serviceWorkerShell];
+        NSURL *url = [NSURL URLWithString:absoluteShellURLString];
+        NSURLRequest *request = [NSURLRequest requestWithURL:url];
+        [self.workerWebView loadRequest:request];
+    } else {
+        NSURL* bundleURL = [NSURL fileURLWithPath:[[NSBundle mainBundle] bundlePath]];
+        NSURL* swShellURL = [bundleURL URLByAppendingPathComponent: [NSString stringWithFormat:@"%@/%@", SERVICE_WORKER_ASSETS_RELATIVE_PATH, serviceWorkerShell]];
+        [self.workerWebView loadFileURL:swShellURL allowingReadAccessToURL:bundleURL];
+    }
 }
 
 
+//Needs testing
 -(void) clearBrowserCache {
     if (@available(iOS 11.3, *)) {
         NSSet *websiteDataTypes = [NSSet setWithArray:@[
@@ -299,14 +337,16 @@ CDVServiceWorker * singletonInstance = nil;
 
 -(NSString *)makeCordovaCallbackScriptWith:(NSNumber *)messageId parameters:(NSDictionary *) parameters andError: (NSError *) error {
     NSString *parameterString = [self convertResultParametersToString: parameters];
+    
     NSString *errorString;
     if (error == nil) {
         errorString = @"undefined";
     } else {
         errorString = [NSString stringWithFormat:@"'%@'", [error description]];
     }
-//    return [NSString stringWithFormat:@"cordovaCallback(%@, %@, %@);", messageId, parameterString, errorString];
-    return [NSString stringWithFormat:@"try { cordovaCallback(%@, %@, %@); } catch (e) { debugger;}", messageId, parameterString, errorString];
+
+//    return [NSString stringWithFormat:@"try { cordovaCallback(%@, %@, %@); } catch (e) { console.error('Failed to call cordova callback');}", messageId, parameterString, errorString];
+    return [NSString stringWithFormat:[cordovaCallbackTemplate content], messageId, parameterString, errorString];
 }
 
 - (NSString *) handlerNameForMessage: (WKScriptMessage *) message {
@@ -540,7 +580,6 @@ CDVServiceWorker * singletonInstance = nil;
         [self evaluateScript: setBaseURLCode];
     }
 
-
     // The script url must be at the root.
     // TODO: Look into supporting non-root ServiceWorker scripts.
     if ([scriptUrl containsString:@"/"]) {
@@ -611,10 +650,7 @@ CDVServiceWorker * singletonInstance = nil;
                                   REGISTRATION_KEY_SCOPE];
     NSArray *registrationObjects = @[[NSNull null], [NSNull null], serviceWorker, scriptUrl, scopeUrl];
     self.registration = [NSDictionary dictionaryWithObjects:registrationObjects forKeys:registrationKeys];
-    if (createRegistrationScriptTemplate == nil) {
-        createRegistrationScriptTemplate = [self readScriptAtRelativePath:CREATE_REGISTRATION_SCRIPT_TEMPLATE_PATH];
-    }
-    NSString *createRegistrationScript = [NSString stringWithFormat:createRegistrationScriptTemplate, scriptUrl];
+    NSString *createRegistrationScript = [NSString stringWithFormat:[createRegistrationTemplate content], scriptUrl];
     [self evaluateScript:createRegistrationScript];
 }
 
@@ -645,42 +681,33 @@ CDVServiceWorker * singletonInstance = nil;
 - (void)postMessage:(CDVInvokedUrlCommand*)command
 {
     NSString *message = [command argumentAtIndex:0];
-    
-    if (postMessageScriptTemplate == nil) {
-        postMessageScriptTemplate = [self readScriptAtRelativePath:POST_MESSAGE_SCRIPT_TEMPLATE_PATH];
-    }
     NSData *data = [message dataUsingEncoding:NSUTF8StringEncoding];
     message = [data base64EncodedStringWithOptions:NSUTF8StringEncoding];
-    NSString *dispatchCode = [NSString stringWithFormat:postMessageScriptTemplate, message];
+    NSString *dispatchCode = [NSString stringWithFormat:[postMessageTemplate content], message];
 
     [self evaluateScript:dispatchCode];
 }
 
-//- (void) doSomethingWithCompletionHandler:(void(^)(int))handler
 - (void)installServiceWorker:(void(^)())handler
 {
     _initiateHandler = handler;
-    NSLog(@"Fire Mock SW Install Event");
-    [self evaluateScript:@"setTimeout(function () {FireInstallEvent().then(window.installServiceWorkerCallback);}, 10);'';"];
+    [self evaluateScript:[dispatchInstallEventTemplate content]];
 }
 
 - (void)installServiceWorker
 {
-    NSLog(@"Fire Mock SW Install Event");
-    [self evaluateScript:@"setTimeout(function () {FireInstallEvent().then(window.installServiceWorkerCallback);}, 10);'';"];
+    [self installServiceWorker: nil];
 }
 
 - (void)activateServiceWorker
 {
-    [self evaluateScript:@"window.fireActivateWorkerCallback = true;"];
-    [self evaluateScript:@"FireActivateEvent().then(activateServiceWorkerCallback);'';"];
+    [self evaluateScript:[dispatchActivateEventTemplate content]];
 }
 
 - (void)initiateServiceWorker
 {
     isServiceWorkerActive = YES;
     _isServiceWorkerActive = YES;
-    NSLog(@"Set is Service Worker Active");
     NSLog(@"Initiating Service Worker. Processing request queue.");
     if (_initiateHandler != nil) {
         _initiateHandler();
@@ -779,8 +806,7 @@ NSString *_clientUrl = nil;
     // TODO: Move assets up one directory, so they're not in www.
     NSString *assetDirectoryPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/www/sw_assets"];
     
-    NSString *definePolyfillIsReadyPromise = @"window.polyfillIsReady = new Promise(function (resolve) {window.resolvePolyfillIsReady = resolve });'';";
-    [self evaluateScript: definePolyfillIsReadyPromise];
+    [self evaluateScript: [definePolyfillIsReadyTemplate content]];
     
     // Get the list of assets.
     NSArray *assetFilenames = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:assetDirectoryPath error:NULL];
@@ -804,8 +830,7 @@ NSString *_clientUrl = nil;
 
     }
     
-     NSString *resolvePolyfillIsReadyPromise = @"window.resolvePolyfillIsReady();'';";
-     [self evaluateScript: resolvePolyfillIsReadyPromise];
+     [self evaluateScript: [resolvePolyfillIsReadyTemplate content]];
 }
 
 - (void)loadScript:(NSString *)script
@@ -879,11 +904,7 @@ NSString *_clientUrl = nil;
                                                              options:NSJSONWritingPrettyPrinted
                                                                error:nil];
         NSString *headers = [[[NSString alloc] initWithData:headerData encoding:NSUTF8StringEncoding] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-
-        NSString *createRequestSnippet = [self readScriptAtRelativePath:@"www/sw_templates/dispatch-fetch-event.js"];
-//        NSString *createRequestSnippet = [NSString stringWithFormat:@"Request.create('%@', '%@', %@)", method, url, headers];
-//        NSString *dispatchCode = [NSString stringWithFormat:@"dispatchEvent(new FetchEvent({request:%@, id:'%lld'}));", createRequestSnippet, [swRequest.requestId longLongValue]];
-        NSString *dispatchCode = [NSString stringWithFormat:createRequestSnippet, method, url, headers, [swRequest.requestId longLongValue]];
+        NSString *dispatchCode = [NSString stringWithFormat:[dispatchFetchEventTemplate content], method, url, headers, [swRequest.requestId longLongValue]];
         [self evaluateScript:dispatchCode];
     }
 
