@@ -49,7 +49,8 @@
     <asset src="www/sw_assets/kamino.js" target="sw_assets/kamino.js" />
     <asset src="www/sw_assets/message.js" target="sw_assets/message.js" />
     <asset src="www/sw_assets/import-scripts.js" target="sw_assets/import-scripts.js" />
-    <asset src="www/sw_assets/service_worker_registration.js" target="sw_assets/service_worker_registration.js" />
+    <asset src="www/service_worker_container.js" target="sw_assets/service_worker_container.js" />
+    <asset src="www/service_worker_registration.js" target="sw_assets/service_worker_registration.js" />
     <asset src="www/sw_assets/syncevents.js" target="sw_assets/syncevents.js" />
     <asset src="www/SyncManager.js" target="sw_assets/SyncManager.js" />
     <asset src="www/PeriodicSyncManager.js" target="sw_assets/PeriodicSyncManager.js" />

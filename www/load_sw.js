@@ -1,5 +1,6 @@
 polyfillIsReady.then(function () {
     var el = document.createElement("script"),
+    head = document.querySelector("head"),
     src = "{{SERVICE_WORKER_PATH}}";
     el.setAttribute("type", "text/javascript");
     el.setAttribute("src", src);

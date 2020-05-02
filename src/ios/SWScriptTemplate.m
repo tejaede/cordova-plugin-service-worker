@@ -41,11 +41,11 @@
 
 -(NSString *) content
 {
-    if (content == nil) {
-        content = [self readScript];
+    if (_content == nil) {
+        _content = [self readScript];
     }
     
-    return content;
+    return _content;
 }
 
 @end
