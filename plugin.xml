@@ -40,7 +40,6 @@
     </js-module>
 
     <!-- Assets for use by the worker (worker env) -->
-    <!-- These should be listed AS-IS in load_sw_assets.js -->
     <asset src="www/sw_assets/sw.html" target="sw_assets/sw.html" />
     <asset src="www/sw_assets/client.js" target="sw_assets/client.js" />
     <asset src="www/sw_assets/cordova-bridge.js" target="sw_assets/cordova-bridge.js" />
@@ -56,6 +55,15 @@
     <asset src="www/PeriodicSyncManager.js" target="sw_assets/PeriodicSyncManager.js" />
     <asset src="www/SyncRegistration.js" target="sw_assets/SyncRegistration.js" />
     <asset src="www/PeriodicSyncRegistration.js" target="sw_assets/PeriodicSyncRegistration.js" />
+
+    <asset src="www/sw_templates/cordova-callback.js" target="sw_templates/cordova-callback.js" />
+    <asset src="www/sw_templates/create-registration.js" target="sw_templates/create-registration.js" />
+    <asset src="www/sw_templates/define-polyfill-is-ready.js" target="sw_templates/define-polyfill-is-ready.js" />
+    <asset src="www/sw_templates/dispatch-activate-event.js" target="sw_templates/dispatch-activate-event.js" />
+    <asset src="www/sw_templates/dispatch-fetch-event.js" target="sw_templates/dispatch-fetch-event.js" />
+    <asset src="www/sw_templates/dispatch-install-event.js" target="sw_templates/dispatch-install-event.js" />
+    <asset src="www/sw_templates/post-message.js" target="sw_templates/post-message.js" />
+    <asset src="www/sw_templates/resolve-polyfill-is-ready.js" target="sw_templates/resolve-polyfill-is-ready.js" />
     
 
     <platform name="ios">
@@ -87,6 +95,8 @@
         <source-file src="src/ios/ServiceWorkerRequest.m" />
         <header-file src="src/ios/ServiceWorkerResponse.h" />
         <source-file src="src/ios/ServiceWorkerResponse.m" />
+        <source-file src="src/ios/SWScriptTemplate.h" />
+        <source-file src="src/ios/SWScriptTemplate.m" />
         <framework src="JavaScriptCore.framework" />
         <framework src="CoreData.framework" />
         <framework src="SystemConfiguration.framework" />

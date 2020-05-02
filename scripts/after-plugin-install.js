@@ -5,7 +5,6 @@ const path = require("path");
 
 const ASSET_DIR_PATH = "www/sw_assets",
       IOS_PLATFORM_PATH = "platforms/ios",
-      POLYFILL_LOADER_SCRIPT_FILE_NAME = "load_sw_assets.js",
       SW_LOADER_SCRIPT_FILE_NAME = "load_sw.js",
       WEB_DIR_NAME = "www",
       PLATFORM_WEB_DIR_NAME = "platform_www";
@@ -43,17 +42,11 @@ function getPluginContext(buildContext) {
     var iosBuildRoot = path.join(buildContext.opts.projectRoot, IOS_PLATFORM_PATH),
         assetsDir = path.join(iosBuildRoot, ASSET_DIR_PATH),
         pluginDir = pluginDirectory(buildContext),
-        polyfillLoaderScriptPath = path.join(pluginDir || iosBuildRoot, WEB_DIR_NAME, POLYFILL_LOADER_SCRIPT_FILE_NAME),
         swLoaderScriptPath = path.join(pluginDir || iosBuildRoot, WEB_DIR_NAME, SW_LOADER_SCRIPT_FILE_NAME);
 
     return {
         pathToSWPolyfillAssets: assetsDir,
-        pathToPolyfillLoader: polyfillLoaderScriptPath,
         pathToSWLoader: swLoaderScriptPath,
-        targetPolyfillLoaderPaths: [
-            path.join(iosBuildRoot, WEB_DIR_NAME, POLYFILL_LOADER_SCRIPT_FILE_NAME),
-            path.join(iosBuildRoot, PLATFORM_WEB_DIR_NAME, POLYFILL_LOADER_SCRIPT_FILE_NAME)
-        ],
         targetSWLoaderPaths: [
             path.join(iosBuildRoot, WEB_DIR_NAME, SW_LOADER_SCRIPT_FILE_NAME),
             path.join(iosBuildRoot, PLATFORM_WEB_DIR_NAME, SW_LOADER_SCRIPT_FILE_NAME)
@@ -86,9 +79,6 @@ module.exports = function(context) {
         var content = replaceTokensInLoader(srcLoaderContent, assets.filter(function (assetPath) {
             return assetPath.indexOf(".js") !== -1;
         }));
-        pluginContext.targetPolyfillLoaderPaths.forEach(function (targetFile) {
-            fs.writeFileSync(targetFile, content, "utf8");
-        });
         pluginContext.targetSWLoaderPaths.forEach(function (targetFile) {
             copyFile(srcSWLoaderScript, targetFile);
         });
