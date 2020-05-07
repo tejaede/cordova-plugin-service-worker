@@ -9,6 +9,7 @@
 
     <dependency id="es6-promise-plugin" url="https://github.com/vstirbu/PromisesPlugin.git" />
     <dependency id="cordova-plugin-network-information" />
+    <dependency id="cordova-plugin-wkwebview-engine" />
 
     <hook type="after_plugin_install" src="scripts/after-plugin-install.js" />
     <hook type="after_prepare" src="scripts/after-plugin-install.js" />
@@ -40,7 +41,7 @@
     </js-module>
 
     <!-- Assets for use by the worker (worker env) -->
-    <asset src="www/sw_assets/sw.html" target="sw_assets/sw.html" />
+    <asset src="www/sw_assets/log.js" target="sw_assets/log.js" />
     <asset src="www/sw_assets/client.js" target="sw_assets/client.js" />
     <asset src="www/sw_assets/cordova-bridge.js" target="sw_assets/cordova-bridge.js" />
     <asset src="www/sw_assets/event.js" target="sw_assets/event.js" />
@@ -76,6 +77,9 @@
             <feature name="BackgroundSync">
 		        <param name="ios-package" value="CDVBackgroundSync" />
 	        </feature>
+            <feature name="CDVSWKWebViewEngine">
+		        <param name="ios-package" value="CDVSWKWebViewEngine" />
+	        </feature>
         </config-file>
         <config-file target="*-Info.plist" parent="UIBackgroundModes">
             <array>
@@ -86,6 +90,9 @@
 	    <source-file src="src/ios/CDVBackgroundSync.m" />
         <header-file src="src/ios/CDVServiceWorker.h" />
         <source-file src="src/ios/CDVServiceWorker.m" />
+        <header-file src="src/ios/CDVSWRequestQueueProtocol.h" />
+        <header-file src="src/ios/CDVSWWKWebViewEngine.h" />
+        <source-file src="src/ios/CDVSWWKWebViewEngine.m" />
         <header-file src="src/ios/CDVSWURLSchemeHandler.h" />
         <source-file src="src/ios/CDVSWURLSchemeHandler.m" />
         <header-file src="src/ios/FetchConnectionDelegate.h" />

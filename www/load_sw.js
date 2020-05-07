@@ -5,5 +5,10 @@ polyfillIsReady.then(function () {
     el.setAttribute("type", "text/javascript");
     el.setAttribute("src", src);
     head.appendChild(el);
+    el.onload = function () {
+        cordovaExec("serviceWorkerLoaded", {
+            url: src
+        });
+    }
 });
 ''; //prevents warning when running script from CDVServiceWorker.m

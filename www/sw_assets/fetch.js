@@ -32,18 +32,21 @@ FetchEvent.prototype = Object.create(Event.prototype);
 FetchEvent.constructor = FetchEvent;
 
 FetchEvent.prototype.respondWith = function (response) {
+
   // Prevent the default handler from running, so that it doesn't override this response.
   this.preventDefault();
 
   // Store the id locally, for use in the `convertAndHandle` function.
   var requestId = this.__requestId;
+    
+    var stack = new Error().stack;
 
   // Send the response to native.
   var convertAndHandle = function (response) {
       try {
-        response.body = window.btoa(response.body);
+         response.body = window.btoa(response.body);
       } catch (e) {
-          console.warn("Failed to decode response body for URL: ", response.url);
+        console.warn("Failed to decode response body for URL: ", response.url);
       }
     
     handleFetchResponse(requestId, response);
@@ -69,6 +72,15 @@ FetchEvent.prototype.default = function (ev) {
 Headers = function (headerDict) {
   this.headerDict = headerDict || {};
 };
+
+Object.defineProperty(Headers.prototype, "headerDict", {
+    get: function () {
+        if (!this._headerDict) {
+            this._headerDict = {};
+        }
+        return this._headerDict;
+    }
+});
 
 Headers.prototype.append = function (name, value) {
   if (this.headerDict[name]) {
@@ -205,14 +217,50 @@ handleTrueFetch = function (method, url, headers, resolve, reject) {
   });
 }
 
+function mapHeadersToPOJO (headers) {
+  var dict = {},
+      keys = headers.keys(),
+      key;
+      
+  while ((key = keys.next().value)) {
+      dict[key] = headers.get(key);
+  }
+  return dict;
+}
+
+function arrayBufferToBase64String (arrayBuffer) {
+    var array = new Uint8Array(arrayBuffer),
+        string = "",
+        i, n;
+    for (i = 0, n = array.length; i < n; ++i) {
+        string += String.fromCharCode(array[i]);
+    }
+    return string;
+}
 
 handleFetchResponse = function (requestId, response) {
-  var message = {
-    requestId: requestId,
-    response: response
-  };
-  cordovaExec("fetchResponse", message, function (response, error) {
-    //intentionally noop
+  return response.arrayBuffer().then(function (arrayBuffer) {
+    var message;
+      try {
+          var base64String = arrayBufferToBase64String(arrayBuffer),
+              headerDict = mapHeadersToPOJO(response.headers);
+              message = {
+                requestId: requestId,
+                response: {
+                    url: response.url,
+                    body: base64String,
+                    headers: headerDict
+                }
+              };
+      } catch (e) {
+          message = {
+            error: e.message,
+            stack: e.stack
+          };
+      }
+      cordovaExec("fetchResponse", message, function (response, error) {
+        //intentionally noop
+      });
   });
 };
 
@@ -221,7 +269,13 @@ handleFetchDefault = function (requestId, request) {
     requestId: requestId,
     request: request
   };
+ 
   cordovaExec("fetchDefault", message, function (response, error) {
     //intentionally noop
+      if (error) {
+        reject(error);
+      } else {
+        resolve(response);
+      }
   });
 };

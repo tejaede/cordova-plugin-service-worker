@@ -21,6 +21,9 @@
 #import <JavaScriptCore/JSContext.h>
 #import <WebKit/WebKit.h>
 #import "CDVBackgroundSync.h"
+#import "CDVSWRequestQueueProtocol.h"
+#import "CDVSWURLSchemeHandler.h"
+#import "ServiceWorkerRequest.h"
 
 
 extern NSString * const SERVICE_WORKER;
@@ -40,12 +43,13 @@ extern NSString * const REGISTRATION_KEY_WAITING;
 extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 
 //@interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
-@interface CDVServiceWorker : CDVPlugin <WKUIDelegate, CDVJavaScriptEvaluator, WKNavigationDelegate, WKScriptMessageHandler> {}
+@interface CDVServiceWorker : CDVPlugin <WKUIDelegate, CDVJavaScriptEvaluator, WKNavigationDelegate, WKScriptMessageHandler, CDVSWRequestQueueProtocol> {}
 
 + (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request;
 + (CDVServiceWorker *)getSingletonInstance;
 
-- (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(NSURLProtocol *)protocol;
+- (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(CDVSWURLSchemeHandler *)handler;
+- (void)addRequestToQueue:(ServiceWorkerRequest *) swRequest;
 - (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl;
 - (void)createServiceWorkerClientWithUrl:(NSString *)url;
 - (void)createServiceWorkerRegistrationWithScriptUrl:(NSString *)scriptUrl scopeUrl:(NSString *)scopeUrl;
@@ -66,10 +70,8 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 @property (nonatomic, retain) NSMutableSet *serviceWorkerAssets;
 
 @property (nonatomic) Boolean *isServiceWorkerActive;
-
-
-
 @property (nonatomic, copy) void (^initiateHandler)();
+//@property (nonatomic, copy) void (^serviceWorkerLoadedHandler)();
 
 @end
 

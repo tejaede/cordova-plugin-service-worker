@@ -26,8 +26,9 @@
 #import "FetchInterceptorProtocol.h"
 #import "ServiceWorkerRequest.h"
 #import "CDVBackgroundSync.h"
-#import "CDVSWURLSchemeHandler.h"
 #import "SWScriptTemplate.h"
+#import "CDVWKWebViewEngine.h"
+#import "CDVSWURLSchemeHandler.h"
 
 static bool isServiceWorkerActive = NO;
 
@@ -54,20 +55,20 @@ NSString * const SERVICE_WORKER_ASSETS_RELATIVE_PATH = @"www/sw_assets";
 
 
 
-
-
-
 @implementation CDVServiceWorker
 
 @synthesize backgroundSync = _backgroundSync;
 @synthesize workerWebView = _workerWebView;
 @synthesize registration = _registration;
 @synthesize requestDelegates = _requestDelegates;
+
 @synthesize requestQueue = _requestQueue;
 @synthesize serviceWorkerScriptFilename = _serviceWorkerScriptFilename;
 @synthesize initiateHandler = _initiateHandler;
 @synthesize isServiceWorkerActive = _isServiceWorkerActive;
 
+CDVSWURLSchemeHandler *mainUrlSchemeHandler;
+NSMutableDictionary *requestsById;
 
 - (NSString *)hashForString:(NSString *)string
 {
@@ -154,9 +155,17 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
     [self initializeScriptTemplates];
     self.requestDelegates = [[NSMutableDictionary alloc] initWithCapacity:10];
+    requestsById = [[NSMutableDictionary alloc] initWithCapacity:10];
     self.requestQueue = [NSMutableArray new];
+    
+    WKWebView *mainWebView = (WKWebView *)[[self webViewEngine] engineWebView];
+    mainUrlSchemeHandler = [[mainWebView configuration] urlSchemeHandlerForURLScheme: @"cordova-main"];
+    mainUrlSchemeHandler.queueHandler = self;
+//    [NSURLProtocol registerClass:[FetchInterceptorProtocol class]];
 
-    [NSURLProtocol registerClass:[FetchInterceptorProtocol class]];
+    
+//    CDVSWURLSchemeHandler *swUrlHandler = [[CDVSWURLSchemeHandler alloc] init];
+//    [[mainWebView configuration] setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-main"];
     
     [self createNewWorkerWebView];
 }
@@ -166,6 +175,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     CDVViewController *vc = (CDVViewController *)[self viewController];
     NSMutableDictionary *settings = [vc settings];
     NSString *applicationURL =  [settings objectForKey:@"remoteapplicationurl"];
+    if ([applicationURL hasSuffix: @"/"]) {
+        applicationURL = [applicationURL substringToIndex: [applicationURL length] - 1];
+    }
     NSString *serviceWorkerShell =  [settings objectForKey:@"serviceworkershell"];
     if (serviceWorkerShell == nil) {
         serviceWorkerShell = DEFAULT_SERVICE_WORKER_SHELL;
@@ -179,7 +191,8 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     
     WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
     CDVSWURLSchemeHandler *swUrlHandler = [[CDVSWURLSchemeHandler alloc] init];
-    [config setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-sw"];
+//    [config setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-sw"];
+    [config setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-main"];
     [config.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
     self.workerWebView = [[WKWebView alloc] initWithFrame: CGRectMake(0, 0, 0, 0) configuration: config]; // Headless
     
@@ -261,8 +274,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     [controller addScriptMessageHandler:self name:@"registerSync"];
     [controller addScriptMessageHandler:self name:@"getSyncRegistrations"];
     [controller addScriptMessageHandler:self name:@"getSyncRegistration"];
-    [controller addScriptMessageHandler:self name:@"unregisterSync"];
+    [controller addScriptMessageHandler:self name:@"serviceWorkerLoaded"];
     [controller addScriptMessageHandler:self name:@"syncResponse"];
+    [controller addScriptMessageHandler:self name:@"unregisterSync"];
 }
 
 - (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message
@@ -291,10 +305,12 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
          [self handleGetSyncRegistrationsScriptMessage:message];
     } else if ([handlerName isEqualToString:@"handleGetSyncRegistrationScriptMessage"]) {
          [self handleGetSyncRegistrationScriptMessage:message];
+    }  else if ([handlerName isEqualToString:@"handleServiceWorkerLoadedScriptMessage"]) {
+        [self handleServiceWorkerLoadedScriptMessage:message];
+   } else if ([handlerName isEqualToString:@"handleSyncResponseScriptMessage"]) {
+         [self handleSyncResponseScriptMessage:message];
     } else if ([handlerName isEqualToString:@"handleUnregisterSyncScriptMessage"]) {
          [self handleUnregisterSyncScriptMessage:message];
-    } else if ([handlerName isEqualToString:@"handleSyncResponseScriptMessage"]) {
-         [self handleSyncResponseScriptMessage:message];
     } else {
         NSLog(@"DidReceiveScriptMessage %@", handlerName);
     }
@@ -382,21 +398,26 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
     [formatter setNumberStyle:NSNumberFormatterDecimalStyle];
     NSNumber *requestId = [formatter numberFromString:jsRequestId];
-    FetchInterceptorProtocol *interceptor = (FetchInterceptorProtocol *)[self.requestDelegates objectForKey:jsRequestId];
     [self.requestDelegates removeObjectForKey:requestId];
-
-    NSData *data = [[NSData alloc] initWithBase64EncodedString:[response[@"body"] toString] options:0];
+    
+    NSString *responseBody = response[@"body"];
+    NSData *data = [[NSData alloc] initWithBase64EncodedString:responseBody options:0];
     JSValue *headers = response[@"headers"];
     NSString *mimeType = [headers[@"mimeType"] toString];
     NSString *encoding = @"utf-8";
-    NSString *url = [response[@"url"] toString]; // TODO: Can this ever be different than the request url? if not, don't allow it to be overridden
-
+//    NSString *url = [response[@"url"] toString]; // TODO: Can this ever be different than the request url? if not, don't allow it to be overridden
+    NSString *url = response[@"url"];
+    
     NSURLResponse *urlResponse = [[NSURLResponse alloc] initWithURL:[NSURL URLWithString:url]
                                                         MIMEType:mimeType
                                            expectedContentLength:data.length
                                                 textEncodingName:encoding];
+    
+    [mainUrlSchemeHandler completeTaskWithId: requestId response: urlResponse data: data error:nil];
+    
+//    [handler completeTask: requestId response: urlResponse data: data error: nil];
 
-    [interceptor handleAResponse:urlResponse withSomeData:data];
+//    [interceptor handleAResponse:urlResponse withSomeData:data];
 }
 
 - (void)handleTrueFetchScriptMessage: (WKScriptMessage *) message
@@ -408,6 +429,8 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSDictionary *headers = [body valueForKey:@"headers"];
     NSDictionary *headersDict = [headers valueForKey:@"headerDict"];
     
+    NSLog(@"SW Fetch: %@", url);
+    
     if ([url hasPrefix:@"cordova-sw"]) {
         url = [url stringByReplacingOccurrencesOfString:@"cordova-sw:"  withString:@"https:"];
     }
@@ -418,7 +441,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *internalUrlString = url;
     
-
     if (![url containsString:@"://"]) {
         internalUrlString = [NSString stringWithFormat:@"/%@/www/%@", [[NSBundle mainBundle] resourcePath], url];
         if (![fileManager fileExistsAtPath:internalUrlString]) {
@@ -434,14 +456,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: url]];
     [request setHTTPMethod:method];
     if (headers != nil) {
-        if ([url hasSuffix: @"configuration"]) {
-            NSLog(@"headers for configuration request -- %lu", (unsigned long)[headers count]);
-        }
         if ([NSThread isMainThread]) {
+            //Switch to for lopp
             [headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL* stop) {
-                if ([url hasSuffix: @"configuration"]) {
-                    NSLog(@"AddHeaderForConfigurationRequest -- %@: %@", key, value);
-                }
                 if([value isKindOfClass:[NSArray class]]){
                     value = [value objectAtIndex:0];
                 }
@@ -449,9 +466,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
             }];
         } else {
             [NSThread performSelectorOnMainThread:@selector(enumerateKeysAndObjectsUsingBlock:) withObject:^(NSString *key, NSString *value, BOOL* stop) {
-                if ([url hasSuffix: @"configuration"]) {
-                    NSLog(@"AddHeaderForConfigurationRequest -- %@: %@", key, value);
-                }
                 [request addValue:value forHTTPHeaderField:key];
             } waitUntilDone:NO];
         }
@@ -469,22 +483,25 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     delegate.reject = ^(NSError *error) {
         [self sendResultToWorker:messageId parameters: nil withError: error];
     };
-    if ([url hasSuffix: @"configuration"]) {
-        NSLog(@"SendConfigurationRequest");
-    }
     [NSURLConnection connectionWithRequest:request delegate:delegate];
 }
 
 
 - (void)handleFetchDefaultScriptMessage: (WKScriptMessage *) message {
     NSDictionary *body = [message body];
-    NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+    NSNumber *messageId = [body valueForKey:@"messageId"];
     NSString *jsRequestId = [body valueForKey:@"requestId"];
-    [formatter setNumberStyle:NSNumberFormatterDecimalStyle];
-    NSNumber *requestId = [formatter numberFromString:jsRequestId];
-    FetchInterceptorProtocol *interceptor = (FetchInterceptorProtocol *)[self.requestDelegates objectForKey:requestId];
-    [self.requestDelegates removeObjectForKey:requestId];
-    [interceptor passThrough];
+//    NSURLRequest* request = [requestsById valueForKey:jsRequestId];
+//    FetchConnectionDelegate *delegate = [FetchConnectionDelegate new];
+//    delegate.resolve = ^(ServiceWorkerResponse *response) {
+//        NSDictionary *responseDict = [response toDictionary];
+//        [self sendResultToWorker:messageId parameters: responseDict];
+//    };
+//    delegate.reject = ^(NSError *error) {
+//        [self sendResultToWorker:messageId parameters: nil withError: error];
+//    };
+//    [NSURLConnection connectionWithRequest:request delegate:delegate];
+    [mainUrlSchemeHandler sendRequestWithId: jsRequestId];
 }
 
 
@@ -560,6 +577,13 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     [self.backgroundSync sendPeriodicSyncResponse:responseType forTag:tag];
 }
 
+
+- (void)handleServiceWorkerLoadedScriptMessage: (WKScriptMessage *) message {
+//    NSDictionary *body = [message body];
+    NSLog(@"handleServiceWorkerLoadedScriptMessage");
+    [self installServiceWorker];
+}
+
 # pragma mark Cordova ServiceWorker Functions
 
 - (void)restartWorker:(CDVInvokedUrlCommand*)command {
@@ -571,6 +595,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSString *scriptUrl = [command argumentAtIndex:0];
 //    NSDictionary *options = [command argumentAtIndex:1];
     NSString *absoluteScriptUrl = [command argumentAtIndex:2];
+    absoluteScriptUrl = [absoluteScriptUrl stringByReplacingOccurrencesOfString:@"cordova-main" withString:@"https"];
     NSString *clientURL = [absoluteScriptUrl stringByReplacingOccurrencesOfString:scriptUrl   withString:@""];
     NSLog(@"Register service worker: %@ (for client: %@)", scriptUrl, clientURL);
     
@@ -596,13 +621,18 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     // If it matches, return it.  If it doesn't, we have a problem!
     // If we don't have a registration on record, create one, store it, and return it.
     if (self.registration != nil) {
-        if (![[self.registration valueForKey:REGISTRATION_KEY_REGISTERING_SCRIPT_URL] isEqualToString:scriptUrl]) {
+        
+        if (![[self.registration valueForKey:REGISTRATION_KEY_REGISTERING_SCRIPT_URL] isEqualToString: absoluteScriptUrl]) {
             CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
                                                               messageAsString:[NSString stringWithFormat:@"The script URL doesn't match the existing registration. existing: %@  new: %@", self.serviceWorkerScriptFilename, scriptUrl]];
             [[self commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
         } else if (![[self.registration valueForKey:REGISTRATION_KEY_SCOPE] isEqualToString:scopeUrl]) {
             CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
                                                               messageAsString:@"The scope URL doesn't match the existing registration."];
+            [[self commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
+        } else {
+            NSLog(@"Return existing registration");
+            CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:self.registration];
             [[self commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
         }
     } else {
@@ -615,16 +645,20 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 //        if (serviceWorkerScript != nil) {
 //            if (![[self hashForString:serviceWorkerScript] isEqualToString:serviceWorkerScriptChecksum]) {
         
-        //TODO Error out if the SW file does not exist
-//                NSLog(@"Create Service Worker: %@", serviceWorkerScriptRelativePath);
-                [self createServiceWorkerFromScript:absoluteScriptUrl clientUrl:clientURL];
-                [self createServiceWorkerClientWithUrl:clientURL];
-                [self createServiceWorkerRegistrationWithScriptUrl:absoluteScriptUrl scopeUrl:scopeUrl];
-            CDVServiceWorker * __weak weakSelf = self;
-            [self installServiceWorker: ^() {
-                CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:weakSelf.registration];
-                [[weakSelf commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
-            }];
+        NSLog(@"Create ServiceWorkerClient: %@", clientURL);
+        [self createServiceWorkerClientWithUrl:clientURL];
+        NSLog(@"Create ServiceWorkerRegistration: %@", absoluteScriptUrl);
+        [self createServiceWorkerRegistrationWithScriptUrl:absoluteScriptUrl scopeUrl:scopeUrl];
+        
+        
+        CDVServiceWorker * __weak weakSelf = self;
+        _initiateHandler = ^() {
+            CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:weakSelf.registration];
+            [[weakSelf commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
+        };
+        NSLog(@"Load ServiceWorkerScript: %@", absoluteScriptUrl);
+        [self createServiceWorkerFromScript:absoluteScriptUrl clientUrl:clientURL];
+
 //            } else {
 //                NSLog(@"ServiceWorker is already registered and contains no changes: %@", serviceWorkerScriptRelativePath);
 //            }
@@ -636,6 +670,18 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     // Return the registration.
 //    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:self.registration];
 //    [[self commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
+}
+
+- (void)unregister:(CDVInvokedUrlCommand*)command
+{
+    
+    NSString *scriptUrl = [command argumentAtIndex:0];
+    NSString *scope = [command argumentAtIndex:1];
+    NSLog(@"Unregister SW at script URL: %@", scriptUrl);
+    self.registration = nil;
+    [self createNewWorkerWebView];
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:self.registration];
+    [[self commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
 }
 
 - (void)createServiceWorkerRegistrationWithScriptUrl:(NSString*)scriptUrl scopeUrl:(NSString*)scopeUrl
@@ -690,7 +736,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
 - (void)installServiceWorker:(void(^)())handler
 {
-    _initiateHandler = handler;
+    if (handler != nil) {
+        _initiateHandler = handler;
+    }
     [self evaluateScript:[dispatchInstallEventTemplate content]];
 }
 
@@ -711,7 +759,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSLog(@"Initiating Service Worker. Processing request queue.");
     if (_initiateHandler != nil) {
         _initiateHandler();
-        
         _initiateHandler = nil;
     }
     [self processRequestQueue];
@@ -722,27 +769,44 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
 - (void)evaluateScript:(NSString *)script
 {
-    
     [self evaluateScript:script inWebView: self.workerWebView];
 }
 
+- (void)evaluateScript:(NSString *)script callback:(void(^)(NSString *result, NSError *error)) callback
+{
+    [self evaluateScript:script inWebView: self.workerWebView callback:callback];
+}
+
 - (void)evaluateScript:(NSString *)script inWebView: (WKWebView *) webView
+{
+    [self evaluateScript:script inWebView: webView callback: nil];
+}
+
+- (void)evaluateScript:(NSString *)script inWebView: (WKWebView *) webView callback:(void(^)(NSString *result, NSError *error)) callback
 {
     
     NSString *viewName = webView == [self workerWebView] ? @"ServiceWorker" : @"Main";
     if ([NSThread isMainThread]) {
         [webView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
             if (error != nil) {
-                NSLog(@"CDVServiceWorker failed to evaluate script in (%@) webView with error: %@", viewName, error.localizedDescription);
-                NSLog(@"Failed script: \n %@", script);
+                if (![[error description] containsString:@"JavaScript execution returned a result of an unsupported type"]) {
+                    NSLog(@"CDVServiceWorker failed to evaluate script in (%@) webView with error: %@", viewName, error.localizedDescription);
+                    NSLog(@"Failed Script: %@", script);
+                }
+            }
+            if (callback != nil) {
+                callback(result, error);
             }
         }];
     } else {
         dispatch_async(dispatch_get_main_queue(), ^{
             [webView evaluateJavaScript:script completionHandler:^(NSString *result, NSError *error) {
-                if (error != nil) {
+                if (![[error description] containsString:@"JavaScript execution returned a result of an unsupported type"]) {
                     NSLog(@"CDVServiceWorker failed to evaluate script in (%@) webView with error: %@", viewName, error.localizedDescription);
-                    NSLog(@"Failed script: \n %@", script);
+                    NSLog(@"Failed Script: %@", script);
+                }
+                if (callback != nil) {
+                    callback(result, error);
                 }
             }];
         });
@@ -752,6 +816,14 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 NSString *_clientUrl = nil;
 
 - (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl
+{
+    _clientUrl = clientUrl;
+   NSString *originalLoader = [self readScriptAtRelativePath:@"www/load_sw.js"];
+   NSString *processedLoader = [originalLoader stringByReplacingOccurrencesOfString:@"{{SERVICE_WORKER_PATH}}" withString:script];
+   [self loadScript:processedLoader];
+}
+
+- (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl callback:(void(^)())callback
 {
     _clientUrl = clientUrl;
    NSString *originalLoader = [self readScriptAtRelativePath:@"www/load_sw.js"];
@@ -842,8 +914,7 @@ NSString *_clientUrl = nil;
 
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
 {
-    
-    NSLog(@"didFinishNavigation");
+    NSLog(@"Worker WebView didFinishNavigation");
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     bool serviceWorkerInstalled = [defaults boolForKey:SERVICE_WORKER_INSTALLED];
     bool serviceWorkerActivated = [defaults boolForKey:SERVICE_WORKER_ACTIVATED];
@@ -863,8 +934,20 @@ NSString *_clientUrl = nil;
 - (void)webViewDidStartLoad:(WKWebView *)wv {}
 - (void)webView:(WKWebView *)wv didFailLoadWithError:(NSError *)error {}
 
+- (Boolean)canAddToQueue {
+    return _isServiceWorkerActive;
+}
 
-- (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(NSURLProtocol *)protocol
+
+- (void)addRequestToQueue:(ServiceWorkerRequest *) swRequest {
+    // Add the request object to the queue.
+    [self.requestQueue addObject:swRequest];
+
+    // Process the request queue.
+    [self processRequestQueue];
+}
+
+- (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(CDVSWURLSchemeHandler *)handler
 {
     // Log!
     NSLog(@"Adding to queue: %@", [[request URL] absoluteString]);
@@ -873,7 +956,8 @@ NSString *_clientUrl = nil;
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest new];
     swRequest.request = request;
     swRequest.requestId = requestId;
-    swRequest.protocol = protocol;
+    [requestsById setValue:request forKey: [requestId stringValue]];
+//    swRequest.protocol = protocol;
 
     // Add the request object to the queue.
     [self.requestQueue addObject:swRequest];
@@ -894,7 +978,7 @@ NSString *_clientUrl = nil;
         NSLog(@"Processing from queue: %@", [[swRequest.request URL] absoluteString]);
 
         // Register the request and delegate.
-        [self.requestDelegates setObject:swRequest.protocol forKey:swRequest.requestId];
+//        [self.requestDelegates setObject:swRequest.handler forKey:swRequest.requestId];
 
         // Fire a fetch event in the JSContext.
         NSURLRequest *request = swRequest.request;

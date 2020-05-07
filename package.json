@@ -26,9 +26,7 @@
     "url": "https://github.com/MobileChromeApps/cordova-plugin-serviceworker/issues"
   },
   "homepage": "https://github.com/MobileChromeApps/cordova-plugin-serviceworker",
-  "scripts": {
-    "test-hooks": "node test/hooks.js"
-  },
+  "scripts": {},
   "devDependencies": {
     "cordova-common": "2.2.3"
   },

@@ -6,6 +6,9 @@ if (typeof cordova !== "undefined") {
         document.addEventListener('deviceready', resolve, false);
     });
     ServiceWorkerContainer = {
+        getRegistrations: function () {
+            return Promise.resolve(this._registration ? [this._registration] : []);
+        },
         //The ready promise is resolved when there is an active Service Worker with registration and the device is ready
         register: function (scriptURL, options) {
             var successCallback = this._makeRegistration.bind(this),
@@ -17,8 +20,10 @@ if (typeof cordova !== "undefined") {
             });
             return this._registrationPromise;
         },
+        _registration: undefined,
         _makeRegistration: function (nativeRegisterResult) {
-            var registration = new ServiceWorkerRegistration(nativeRegisterResult.installing, nativeRegisterResult.waiting, new ServiceWorker(), nativeRegisterResult.registeringScriptUrl, nativeRegisterResult.scope);
+            var registration = new ServiceWorkerRegistration(nativeRegisterResult.installing, nativeRegisterResult.waiting, new ServiceWorker(), nativeRegisterResult.registeringScriptURL, nativeRegisterResult.scope);
+            this._registration = registration;
             this._resolveRegistrationPromise(registration);
         },
         _resolveURL: function (url) {
