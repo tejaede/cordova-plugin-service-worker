@@ -1,33 +1,228 @@
-(function () {
-    var caches = window.caches,
-        origOpen = caches.open;
-    Object.defineProperty(caches, "open", {
-        value: function (cacheName) {
-            return origOpen.call(window.caches, cacheName).then(function (cache) {
-                overrideAddMethods(cache);
-                return cache;
-            });
-        }
-    });
+Cache = function(cacheName) {
+    this.name = cacheName;
+    return this;
+};
 
-    function overrideAddMethods(cache) {
-        cache.add = function (url) {
-            url = URL.absoluteURLfromMainClient(url);
-            return fetch(url).then(function(response) {
-              if (!response.ok) {
-                throw new TypeError('bad response status');
-              }
-              return cache.put(url, response.fetchResponse);
-            }).catch(function (e) {
-                console.error("Failed to put response", url);
-            });
-        };
-        cache.addAll = function (urls) {
-            return Promise.all(urls.map(function (url) {
-                return cache.add(url);
-            })).catch(function (e) {
-                console.error("Failed to add all", urls);
-            });
-        };
+Cache.prototype.match = function(request, options) {
+  var cacheName = this.name;
+  return new Promise(function(resolve, reject) {
+    var encodeResponse = function(response) {
+        
+        if (response) {
+            try {
+                var body = window.atob(response.body);
+                response = new Response(body, response.url, response.status, response.headers);
+            } catch (e) {
+              console.error("Failed to cache response for - ", response.url);
+            }
+            
+        }
+      return resolve(response);
+    };
+    // Call the native match function.
+    cacheMatch(cacheName, request, options, encodeResponse, reject);
+  });
+};
+
+Cache.prototype.matchAll = function(request, options) {
+  var cacheName = this.name;
+  return new Promise(function(resolve, reject) {
+    var encodeResponses = function(responses) {
+      if (responses instanceof Array) {
+        var encodedResponses = [];
+        for (var i=0; i < responses.length; ++i) {
+          var response = responses[i];
+          encodedReponses.push(new Response(window.atob(response.body), response.url, response.status, response.headers));
+        }
+        return resolve(encodedResponses);
+      }
+      return resolve(responses);
+    };
+    // Call the native matchAll function.
+    cacheMatchAll(cacheName, request, options, encodeResponses, reject);
+  });
+};
+
+Cache.prototype.add = function(request) {
+  // Fetch a response for the given request, then put the pair into the cache.
+  var cache = this;
+   console.log("Cache.add", request.url || request);
+  return fetch(request).then(function(response) {
+      
+    return cache.put(request, response);
+  });
+};
+
+Cache.prototype.addAll = function(requests) {
+  // Create a list of `add` promises, one for each request.
+  var promiseList = [];
+  for (var i=0; i<requests.length; i++) {
+    promiseList.push(this.add(requests[i]));
+  }
+
+  // Return a promise for all of the `add` promises.
+  return Promise.all(promiseList);
+};
+
+Cache.prototype.put = function(request, response) {
+  var cacheName = this.name;
+    console.log("Cache.put", request.url || request);
+  return new Promise(function(resolve, reject) {
+    // Call the native put function.
+      response.toDict().then(function (responseDict) {
+          var requestDict = request.toDict();
+          responseDict.url = request.url || request;
+          cachePut(cacheName, requestDict, responseDict, resolve, reject);
+      }).catch(function (e) {
+          reject(e);
+      });
+  });
+};
+
+Cache.prototype.delete = function(request, options) {
+  var cacheName = this.name;
+  return new Promise(function(resolve, reject) {
+    // Call the native delete function.
+    cacheDelete(cacheName, request, options, resolve, reject);
+  });
+};
+
+Cache.prototype.keys = function(request, options) {
+  var cacheName = this.name;
+  return new Promise(function(resolve, reject) {
+    // Convert the given request dictionaries to actual requests.
+    var innerResolve = function(dicts) {
+        var requests = [];
+        for (var i=0; i<dicts.length; i++) {
+            var requestDict = dicts[i];
+            requests.push(new Request(requestDict.method, requestDict.url, requestDict.headers));
+        }
+        resolve(requests);
+    };
+
+    // Call the native keys function.
+    cacheKeys(cacheName, request, options, innerResolve, reject);
+  });
+};
+
+
+CacheStorage = function() {
+    // TODO: Consider JS cache name caching solutions, such as a list of cache names and a flag for whether we have fetched from CoreData yet.
+    // Right now, all calls except `open` go to native.
+    return this;
+};
+
+// This function returns a promise for a response.
+CacheStorage.prototype.match = function(request, options) {
+  return new Promise(function(resolve, reject) {
+    var encodeResponse = function(response) {
+        if (response && response.body) {
+         response = new Response(window.atob(response.body), response.url, response.status, response.headers);
+      }
+      return resolve(response);
+    };
+    // Call the native match function.
+    cacheMatch(options && options.cacheName, request, options, encodeResponse, reject);
+  });
+};
+
+CacheStorage.prototype.has = function(cacheName) {
+  return new Promise(function(resolve, reject) {
+    // Check if the cache exists in native.
+    cachesHas(cacheName, resolve, reject);
+  });
+};
+
+CacheStorage.prototype.open = function(cacheName) {
+  return new Promise(function(resolve, reject) {
+    // Resolve the promise with a JS cache.
+    resolve(new Cache(cacheName));
+  });
+};
+
+// This function returns a promise for a response.
+CacheStorage.prototype.delete = function(cacheName) {
+  return new Promise(function(resolve, reject) {
+    // Delete the cache in native.
+    cacheDelete(cacheName, resolve, reject);
+  });
+};
+
+// This function returns a promise for a response.
+CacheStorage.prototype.keys = function() {
+  return new Promise(function(resolve, reject) {
+    // Resolve the promise with the cache name list.
+    cachesKeys(resolve, reject);
+  });
+};
+
+try {
+  window.caches = new CacheStorage();
+} catch(e) {
+  window.errors = window.errors || [];
+  window.errors.push({name: "overwritecaches", error: e});
+}
+
+cacheMatch = function (cacheName, request, options, resolve, reject) {
+  var message = {
+    cacheName: cacheName,
+    request: request instanceof Request ? request.toDict() : request,
+    options: options
+  };
+    
+  cordovaExec("cacheMatch", message, function (response, error) {
+    if (error) {
+      reject(error);
+    } else {
+      resolve(response || null);
     }
-})();
+  });
+};
+
+cacheMatchAll = function (cacheName, request, options, resolve, reject) {
+  var message = {
+    cacheName: cacheName,
+    request: request,
+    options: options
+  };
+  cordovaExec("cacheMatchAll", message, function (response, error) {
+    if (error) {
+      reject(error);
+    } else {
+      resolve(response);
+    }
+  });
+};
+
+cachePut = function (cacheName, request, response, resolve, reject) {
+  var message = {
+    cacheName: cacheName,
+    request: request,
+    response: response,
+    options: {}
+  };
+
+  cordovaExec("cachePut", message, function (response, error) {
+    if (error) {
+      reject(error);
+    } else {
+      resolve(response);
+    }
+  });
+};
+
+cacheDelete = function (cacheName, resolve, reject) {
+ var message = {
+   cacheName: cacheName,
+   options: {}
+ };
+
+ cordovaExec("cacheDelete", message, function (response, error) {
+   if (error) {
+     reject(error);
+   } else {
+       resolve(response.success);
+   }
+ });
+};
+

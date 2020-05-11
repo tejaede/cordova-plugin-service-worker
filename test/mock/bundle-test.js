@@ -1,0 +1,1 @@
+getPlatform=function(){if("undefined"!=typeof self&&"undefined"!=typeof importScripts)return importScripts("packages/montage@4893e99/worker.js"),worker;};

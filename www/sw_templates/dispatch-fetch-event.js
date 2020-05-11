@@ -1,6 +1,6 @@
 try {
     var method = '%@',
-        url = '%@',
+        url = "%@",
         headers = %@;
     dispatchEvent(new FetchEvent({request:Request.create(method, url, headers), id:'%lld'}));
 } catch (e) {

@@ -24,6 +24,7 @@
 #import "CDVServiceWorker.h"
 #import "FetchConnectionDelegate.h"
 #import "FetchInterceptorProtocol.h"
+#import "ServiceWorkerCacheApi.h"
 #import "ServiceWorkerRequest.h"
 #import "CDVBackgroundSync.h"
 #import "SWScriptTemplate.h"
@@ -35,6 +36,7 @@ static bool isServiceWorkerActive = NO;
 
 NSString * const SERVICE_WORKER = @"serviceworker";
 NSString * const SERVICE_WORKER_SCOPE = @"serviceworkerscope";
+NSString * const SERVICE_WORKER_CACHE_CORDOVA_ASSETS = @"cachecordovaassets";
 NSString * const SERVICE_WORKER_ACTIVATED = @"ServiceWorkerActivated";
 NSString * const SERVICE_WORKER_INSTALLED = @"ServiceWorkerInstalled";
 NSString * const SERVICE_WORKER_SCRIPT_CHECKSUM = @"ServiceWorkerScriptChecksum";
@@ -64,9 +66,11 @@ NSString * const SERVICE_WORKER_ASSETS_RELATIVE_PATH = @"www/sw_assets";
 
 @synthesize requestQueue = _requestQueue;
 @synthesize serviceWorkerScriptFilename = _serviceWorkerScriptFilename;
+@synthesize cacheApi = _cacheApi;
 @synthesize initiateHandler = _initiateHandler;
 @synthesize isServiceWorkerActive = _isServiceWorkerActive;
 
+CDVSWURLSchemeHandler *swUrlSchemeHandler;
 CDVSWURLSchemeHandler *mainUrlSchemeHandler;
 NSMutableDictionary *requestsById;
 
@@ -113,7 +117,7 @@ NSMutableDictionary *requestsById;
 CDVServiceWorker * singletonInstance = nil;
 + (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request
 {
-    return isServiceWorkerActive ? singletonInstance : nil;
+    return singletonInstance;
 }
 
 + (CDVServiceWorker *)getSingletonInstance
@@ -158,15 +162,12 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     requestsById = [[NSMutableDictionary alloc] initWithCapacity:10];
     self.requestQueue = [NSMutableArray new];
     
+    NSLog(@"Add Cordova Main Protocol");
     WKWebView *mainWebView = (WKWebView *)[[self webViewEngine] engineWebView];
     mainUrlSchemeHandler = [[mainWebView configuration] urlSchemeHandlerForURLScheme: @"cordova-main"];
     mainUrlSchemeHandler.queueHandler = self;
-//    [NSURLProtocol registerClass:[FetchInterceptorProtocol class]];
 
-    
-//    CDVSWURLSchemeHandler *swUrlHandler = [[CDVSWURLSchemeHandler alloc] init];
-//    [[mainWebView configuration] setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-main"];
-    
+    [self clearBrowserCache];
     [self createNewWorkerWebView];
 }
 
@@ -178,10 +179,17 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     if ([applicationURL hasSuffix: @"/"]) {
         applicationURL = [applicationURL substringToIndex: [applicationURL length] - 1];
     }
+//    applicationURL = [applicationURL stringByReplacingOccurrencesOfString:@"https" withString:@"cordova-sw"];
+//    applicationURL = [applicationURL stringByReplacingOccurrencesOfString:@"cordova-main" withString:@"https"];
     NSString *serviceWorkerShell =  [settings objectForKey:@"serviceworkershell"];
     if (serviceWorkerShell == nil) {
         serviceWorkerShell = DEFAULT_SERVICE_WORKER_SHELL;
     }
+
+    // Initialize CoreData for the Cache API.
+    self.cacheApi = [[ServiceWorkerCacheApi alloc] initWithScope:@"/" cacheCordovaAssets:false];
+    [self.cacheApi initializeStorage];
+    
 
     //Clean up existing webView
     if (self.workerWebView != nil) {
@@ -190,16 +198,19 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     }
     
     WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
-    CDVSWURLSchemeHandler *swUrlHandler = [[CDVSWURLSchemeHandler alloc] init];
-//    [config setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-sw"];
-    [config setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-main"];
+   swUrlSchemeHandler =  [[CDVSWURLSchemeHandler alloc] init];
+    [config setURLSchemeHandler:swUrlSchemeHandler forURLScheme:@"cordova-main"];
     [config.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
     self.workerWebView = [[WKWebView alloc] initWithFrame: CGRectMake(0, 0, 0, 0) configuration: config]; // Headless
     
     [self registerForJavascriptMessages];
+    [self.cacheApi registerForJavascriptMessagesForWebView:[self workerWebView]];
     
     self.backgroundSync = [self.commandDelegate getCommandInstance:@"BackgroundSync"];
     self.backgroundSync.scriptRunner = self;
+    
+    
+//    NSLog(@"createNewWorkerWebView");
 
     [self.viewController.view addSubview:self.workerWebView];
     
@@ -209,8 +220,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSString *absoluteShellURLString;
     if (applicationURL != nil) {
         absoluteShellURLString = [NSString stringWithFormat:@"%@/%@", applicationURL, serviceWorkerShell];
-        NSURL *url = [NSURL URLWithString:absoluteShellURLString];
-        NSURLRequest *request = [NSURLRequest requestWithURL:url];
+        NSLog(@"LoadShell - %@", absoluteShellURLString);
+        NSURL *url = [NSURL URLWithString: absoluteShellURLString];
+        NSURLRequest *request = [NSURLRequest requestWithURL: url cachePolicy:NSURLRequestReturnCacheDataElseLoad timeoutInterval:60];
         [self.workerWebView loadRequest:request];
     } else {
         NSURL* bundleURL = [NSURL fileURLWithPath:[[NSBundle mainBundle] bundlePath]];
@@ -241,7 +253,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
         // Fallback on earlier versions
         NSSet *websiteDataTypes = [NSSet setWithArray:@[
             WKWebsiteDataTypeDiskCache,
-            //WKWebsiteDataTypeOfflineWebApplicationCache,
+            WKWebsiteDataTypeOfflineWebApplicationCache,
             WKWebsiteDataTypeMemoryCache,
             //WKWebsiteDataTypeLocalStorage,
             //WKWebsiteDataTypeCookies,
@@ -431,12 +443,17 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     
     NSLog(@"SW Fetch: %@", url);
     
-    if ([url hasPrefix:@"cordova-sw"]) {
-        url = [url stringByReplacingOccurrencesOfString:@"cordova-sw:"  withString:@"https:"];
+    if ([url hasPrefix:@"cordova-main"]) {
+        url = [url stringByReplacingOccurrencesOfString:@"cordova-main:"  withString:@"https:"];
     }
 
     if (headersDict != nil) {
         headers = headersDict;
+    } else {
+        headersDict = [headers valueForKey:@"_headerDict"];
+        if (headersDict != nil) {
+            headers = headersDict;
+        }
     }
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *internalUrlString = url;
@@ -456,19 +473,30 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: url]];
     [request setHTTPMethod:method];
     if (headers != nil) {
-        if ([NSThread isMainThread]) {
-            //Switch to for lopp
-            [headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL* stop) {
-                if([value isKindOfClass:[NSArray class]]){
-                    value = [value objectAtIndex:0];
-                }
-                [request addValue:value forHTTPHeaderField:key];
-            }];
-        } else {
-            [NSThread performSelectorOnMainThread:@selector(enumerateKeysAndObjectsUsingBlock:) withObject:^(NSString *key, NSString *value, BOOL* stop) {
-                [request addValue:value forHTTPHeaderField:key];
-            } waitUntilDone:NO];
+        for (NSString* key in headers) {
+            id value = headers[key];
+            if([value isKindOfClass:[NSArray class]]){
+                value = [value objectAtIndex:0];
+            }
+            [request setValue: value forHTTPHeaderField:key];
         }
+//        if ([NSThread isMainThread]) {
+//            //Switch to for lopp
+//            for (NSString* key in headers) {
+//                id value = headers[key];
+//                [request setValue: value forHTTPHeaderField:key];
+//            }
+//            [headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL* stop) {
+//                if([value isKindOfClass:[NSArray class]]){
+//                    value = [value objectAtIndex:0];
+//                }
+//                [request addValue:value forHTTPHeaderField:key];
+//            }];
+//        } else {
+//            [NSThread performSelectorOnMainThread:@selector(enumerateKeysAndObjectsUsingBlock:) withObject:^(NSString *key, NSString *value, BOOL* stop) {
+//                [request addValue:value forHTTPHeaderField:key];
+//            } waitUntilDone:NO];
+//        }
     };
 
     
@@ -595,7 +623,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSString *scriptUrl = [command argumentAtIndex:0];
 //    NSDictionary *options = [command argumentAtIndex:1];
     NSString *absoluteScriptUrl = [command argumentAtIndex:2];
-    absoluteScriptUrl = [absoluteScriptUrl stringByReplacingOccurrencesOfString:@"cordova-main" withString:@"https"];
+//    absoluteScriptUrl = [absoluteScriptUrl stringByReplacingOccurrencesOfString:@"cordova-main" withString:@"https"];
     NSString *clientURL = [absoluteScriptUrl stringByReplacingOccurrencesOfString:scriptUrl   withString:@""];
     NSLog(@"Register service worker: %@ (for client: %@)", scriptUrl, clientURL);
     
@@ -656,7 +684,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
             CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:weakSelf.registration];
             [[weakSelf commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
         };
-        NSLog(@"Load ServiceWorkerScript: %@", absoluteScriptUrl);
+        NSLog(@"Load ServiceWorkerScript: %@ %@", absoluteScriptUrl, clientURL);
         [self createServiceWorkerFromScript:absoluteScriptUrl clientUrl:clientURL];
 
 //            } else {
@@ -823,14 +851,6 @@ NSString *_clientUrl = nil;
    [self loadScript:processedLoader];
 }
 
-- (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl callback:(void(^)())callback
-{
-    _clientUrl = clientUrl;
-   NSString *originalLoader = [self readScriptAtRelativePath:@"www/load_sw.js"];
-   NSString *processedLoader = [originalLoader stringByReplacingOccurrencesOfString:@"{{SERVICE_WORKER_PATH}}" withString:script];
-   [self loadScript:processedLoader];
-}
-
 - (void)createServiceWorkerClientWithUrl:(NSString *)url
 {
     // Create a ServiceWorker client.
@@ -859,11 +879,16 @@ NSString *_clientUrl = nil;
     return script;
 }
 
+- (void) webView: (WKWebView *) webView didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge *) challenge completionHandler:(nonnull void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler {
+    NSURLCredential * credential = [[NSURLCredential alloc] initWithTrust:[challenge protectionSpace].serverTrust];
+    NSLog(@"didReceiveAuthenticationChallenge");
+    completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
+}
+
 
 - (void)loadServiceWorkerAssetsIntoContext
 {
     NSArray *rootSWAssetFileNames = [[NSArray alloc] initWithObjects:
-        @"cache.js",
         @"client.js",
         @"cordova-bridge.js",
         @"event.js",
@@ -871,10 +896,11 @@ NSString *_clientUrl = nil;
         @"import-scripts.js",
         @"kamino.js",
         @"message.js",
+        @"cache.js",
         @"service_worker_container.js",
         @"service_worker_registration.js",
     nil];
-    // Specify the assets directory.
+    // Specify the assets directory.e
     // TODO: Move assets up one directory, so they're not in www.
     NSString *assetDirectoryPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/www/sw_assets"];
     
@@ -911,10 +937,14 @@ NSString *_clientUrl = nil;
     [self evaluateScript:script];
 }
 
+- (void)webViewWebContentProcessDidTerminate:(WKWebView *)webView {
+    NSLog(@"Worker webViewWebContentProcessDidTerminate - %@", [[webView URL] absoluteString]);
+    [webView reload];
+}
 
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
 {
-    NSLog(@"Worker WebView didFinishNavigation");
+    NSLog(@"Worker WebView didFinishNavigation - %@", [[webView URL] absoluteString]);
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     bool serviceWorkerInstalled = [defaults boolForKey:SERVICE_WORKER_INSTALLED];
     bool serviceWorkerActivated = [defaults boolForKey:SERVICE_WORKER_ACTIVATED];
@@ -928,11 +958,17 @@ NSString *_clientUrl = nil;
     }
 }
 
+- (void) webView: (WKWebView *) webView didFailLoadWithError:(nonnull NSError *)error {
+    NSLog(@"Worker WebView didFailLoadWithError - %@", [[webView URL] absoluteString]);
+}
 
 
-- (void)webView:(WKWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request {}
-- (void)webViewDidStartLoad:(WKWebView *)wv {}
-- (void)webView:(WKWebView *)wv didFailLoadWithError:(NSError *)error {}
+- (void)webView:(WKWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request {
+    NSLog(@"Worker WebView shouldStartLoadWithRequest - %@", [[webView URL] absoluteString]);
+}
+- (void)webViewDidStartLoad:(WKWebView *)webView {
+    NSLog(@"Worker WebView didStartLoad - %@", [[webView URL] absoluteString]);
+}
 
 - (Boolean)canAddToQueue {
     return _isServiceWorkerActive;
@@ -984,6 +1020,7 @@ NSString *_clientUrl = nil;
         NSURLRequest *request = swRequest.request;
         NSString *method = [request HTTPMethod];
         NSString *url = [[request URL] absoluteString];
+        url = [url stringByReplacingOccurrencesOfString:@"'" withString:@"\'"];
         NSData *headerData = [NSJSONSerialization dataWithJSONObject:[request allHTTPHeaderFields]
                                                              options:NSJSONWritingPrettyPrinted
                                                                error:nil];

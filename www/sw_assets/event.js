@@ -18,12 +18,23 @@ Event.prototype.preventDefault = function() {
   }
 };
 
-Event.prototype.waitUntil = function(promise) {
-  if (this._promises === null) {
-    this._promises = [];
-  }
-  this._promises.push(promise);
-};
+Object.defineProperties(Event.prototype, {
+    _promises: {
+        get: function () {
+            if (!this.__promises) {
+                this.__promises = [];
+            }
+            return this.__promises;
+        },
+        enumerable: true
+    },
+    waitUntil: {
+        value: function (promise) {
+            this._promises.push(promise);
+        },
+        enumerable: true
+    }
+});
 
 
 ExtendableEvent = function(type) {

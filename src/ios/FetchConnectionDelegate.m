@@ -20,6 +20,7 @@
 #import "FetchConnectionDelegate.h"
 #import "ServiceWorkerResponse.h"
 
+
 @implementation FetchConnectionDelegate
 
 @synthesize responseData = _responseData;

@@ -19,27 +19,37 @@
 
 #import "FetchInterceptorProtocol.h"
 #import "CDVServiceWorker.h"
+#import "FetchConnectionDelegate.h"
+#import "ServiceWorkerResponse.h"
 
 #include <libkern/OSAtomic.h>
 
 @implementation FetchInterceptorProtocol
 @synthesize connection=_connection;
 
+@synthesize serviceWorkerResponse = _serviceWorkerResponse;
+@synthesize responseData = _responseData;
+
 static int64_t requestCount = 0;
 
-//+ (BOOL)canInitWithRequest:(NSURLRequest *)request {
-//    // We don't want to intercept any requests for the worker page.
++ (BOOL)canInitWithRequest:(NSURLRequest *)request {
+    // We don't want to intercept any requests for the worker page.
+    
 //    if ([[[request URL] absoluteString] hasSuffix:@"sw.html"]) {
 //        return NO;
 //    }
-//
-//    // Check - is there a service worker for this request?
-//    // For now, assume YES -- all requests go through service worker. This may be incorrect if there are iframes present.
-//    if ([NSURLProtocol propertyForKey:@"PassThrough" inRequest:request]) {
-//        NSLog(@"PassThrough URL %@",   [[request URL] absoluteString]);
-//        // Already seen; not handling
-//        return NO;
-//    } else if ([NSURLProtocol propertyForKey:@"PureFetch" inRequest:request]) {
+    
+    
+
+    // Check - is there a service worker for this request?
+    // For now, assume YES -- all requests go through service worker. This may be incorrect if there are iframes present.
+    if ([NSURLProtocol propertyForKey:@"PassThrough" inRequest:request]) {
+        NSLog(@"PassThrough URL %@",   [[request URL] absoluteString]);
+        // Already seen; not handling
+        return NO;
+    }
+    NSLog(@"canInitWIthRequest - %@", [[request URL] absoluteString]);
+//else if ([NSURLProtocol propertyForKey:@"PureFetch" inRequest:request]) {
 //        // Fetching directly; bypass ServiceWorker.
 //        return NO;
 //    } else if ([request valueForHTTPHeaderField:@"x-import-scripts"] != nil){
@@ -53,37 +63,46 @@ static int64_t requestCount = 0;
 //        // No Service Worker installed; not handling
 //        return NO;
 //    }
-//}
+    return YES;
+}
 //
-//+ (NSURLRequest *)canonicalRequestForRequest:(NSURLRequest *)request {
-//    return request;
-//}
++ (NSURLRequest *)canonicalRequestForRequest:(NSURLRequest *)request {
+    return request;
+}
 //
-//+ (BOOL)requestIsCacheEquivalent:(NSURLRequest *)a toRequest:(NSURLRequest *)b {
-//    return [super requestIsCacheEquivalent:a toRequest:b];
-//}
++ (BOOL)requestIsCacheEquivalent:(NSURLRequest *)a toRequest:(NSURLRequest *)b {
+    return [super requestIsCacheEquivalent:a toRequest:b];
+}
 
-//- (void)startLoading {
-//    // Attach a reference to the Service Worker to a copy of the request
+- (void)startLoading {
+    // Attach a reference to the Service Worker to a copy of the request
 //    NSMutableURLRequest *workerRequest = [self.request mutableCopy];
 //    CDVServiceWorker *instanceForRequest = [CDVServiceWorker instanceForRequest:workerRequest];
 //    [NSURLProtocol setProperty:instanceForRequest forKey:@"ServiceWorkerPlugin" inRequest:workerRequest];
 //    NSNumber *requestId = [NSNumber numberWithLongLong:OSAtomicIncrement64(&requestCount)];
 //    [NSURLProtocol setProperty:requestId forKey:@"RequestId" inRequest:workerRequest];
-//    NSLog(@"startLoading %@", [[self.request URL] absoluteString]);
+    NSLog(@"startLoading %@", [[self.request URL] absoluteString]);
+    CDVServiceWorker *sw = [CDVServiceWorker instanceForRequest:nil];
+    _serviceWorkerResponse = [[sw cacheApi] matchRequest:[self.connection originalRequest] inCache:nil];
+    if (_serviceWorkerResponse != nil) {
+        NSLog(@"Found Response %@", [[self.request URL] absoluteString]);
+    } else {
+        NSLog(@"No Cached Response %@", [[self.request URL] absoluteString]);
+    }
+    
 //    if ([[[workerRequest URL] absoluteString] hasSuffix:@"sw.js"] || [[[workerRequest URL] absoluteString] containsString:@"/sw_assets/"]) {
-//        NSMutableURLRequest *taggedRequest = [self.request mutableCopy];
-//        [NSURLProtocol setProperty:@YES forKey:@"PassThrough" inRequest:taggedRequest];
-//        self.connection = [NSURLConnection connectionWithRequest:taggedRequest delegate:self];
+        NSMutableURLRequest *taggedRequest = [self.request mutableCopy];
+        [NSURLProtocol setProperty:@YES forKey:@"PassThrough" inRequest:taggedRequest];
+        self.connection = [NSURLConnection connectionWithRequest:taggedRequest delegate:self];
 //    } else {
 //        [instanceForRequest addRequestToQueue:workerRequest withId:requestId delegateTo:self];
 //    }
-//}
+}
 //
-//- (void)stopLoading {
-//    [self.connection cancel];
-//    self.connection = nil;
-//}
+- (void)stopLoading {
+    [self.connection cancel];
+    self.connection = nil;
+}
 
 //- (void)passThrough {
 //    // Flag this request as a pass-through so that the URLProtocol doesn't try to grab it again
@@ -94,15 +113,26 @@ static int64_t requestCount = 0;
 //    self.connection = [NSURLConnection connectionWithRequest:taggedRequest delegate:self];
 //}
 
+- (void)sendResponseWithResponseCode:(NSInteger)statusCode data:(NSData*)data mimeType:(NSString*)mimeType {
+    NSLog(@"sendResponseWithResponseCode - %ld %@", (long)statusCode, mimeType);
+}
+
 - (void)handleAResponse:(NSURLResponse *)response withSomeData:(NSData *)data {
     // TODO: Move cache storage policy into args
-    [self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageNotAllowed];
+    [self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageAllowed];
     [self.client URLProtocol:self didLoadData:data];
     [self.client URLProtocolDidFinishLoading:self];
 }
 
 - (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response {
     NSLog(@"FetchInterceptorProtocol.didReceiveResponse %@",   [[response URL] absoluteString]);
+    if (_serviceWorkerResponse == nil) {
+        _serviceWorkerResponse = [ServiceWorkerResponse new];
+        _serviceWorkerResponse.status = @200;
+        _serviceWorkerResponse.headers = nil;
+    }
+     self.responseData = [[NSMutableData alloc] init];
+
     [self.client URLProtocol:self didReceiveResponse:response cacheStoragePolicy:NSURLCacheStorageAllowed];
     if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
         NSDictionary *allHeaders = [(NSHTTPURLResponse*)response allHeaderFields];
@@ -110,22 +140,25 @@ static int64_t requestCount = 0;
             if([value isKindOfClass:[NSArray class]]){
                 value = [value objectAtIndex:0];
             }
-            NSLog(@"%@ : %@", key, value);
+//            NSLog(@"%@ : %@", key, value);
         }];
     }
-    
 }
 
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {
+    [self.responseData appendData: data];
     [self.client URLProtocol:self didLoadData:data];
 }
 
 - (void)connectionDidFinishLoading:(NSURLConnection *)connection {
-
+    CDVServiceWorker *sw = [CDVServiceWorker instanceForRequest:nil];
+    _serviceWorkerResponse.body = self.responseData;
+    [[sw cacheApi] putRequest:[connection currentRequest] andResponse:_serviceWorkerResponse inCache:nil];
     [self.client URLProtocolDidFinishLoading:self];
 }
 
 - (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error {
+    NSLog(@"FetchInterceptorProtocol.didFailWithError %@",   [[[connection originalRequest] URL] absoluteString]);
     [self.client URLProtocol:self didFailWithError:error];
 }
 

@@ -19,6 +19,7 @@
 
 #import <Cordova/CDVPlugin.h>
 #import <JavaScriptCore/JSContext.h>
+#import "ServiceWorkerCacheApi.h"
 #import <WebKit/WebKit.h>
 #import "CDVBackgroundSync.h"
 #import "CDVSWRequestQueueProtocol.h"
@@ -67,6 +68,7 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 @property (nonatomic, retain) NSMutableArray *requestQueue;
 @property (nonatomic, retain) NSDictionary *registration;
 @property (nonatomic, retain) NSString *serviceWorkerScriptFilename;
+@property (nonatomic, retain) ServiceWorkerCacheApi *cacheApi;
 @property (nonatomic, retain) NSMutableSet *serviceWorkerAssets;
 
 @property (nonatomic) Boolean *isServiceWorkerActive;

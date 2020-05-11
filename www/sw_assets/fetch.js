@@ -38,17 +38,17 @@ FetchEvent.prototype.respondWith = function (response) {
 
   // Store the id locally, for use in the `convertAndHandle` function.
   var requestId = this.__requestId;
-    
-    var stack = new Error().stack;
+
+  var stack = new Error().stack;
 
   // Send the response to native.
   var convertAndHandle = function (response) {
-      try {
-         response.body = window.btoa(response.body);
-      } catch (e) {
-        console.warn("Failed to decode response body for URL: ", response.url);
-      }
-    
+    try {
+      response.body = window.btoa(response.body);
+    } catch (e) {
+      console.warn("Failed to decode response body for URL: ", response.url);
+    }
+
     handleFetchResponse(requestId, response);
   };
 
@@ -69,60 +69,36 @@ FetchEvent.prototype.default = function (ev) {
   });
 };
 
-Headers = function (headerDict) {
-  this.headerDict = headerDict || {};
-};
 
-Object.defineProperty(Headers.prototype, "headerDict", {
-    get: function () {
-        if (!this._headerDict) {
-            this._headerDict = {};
-        }
-        return this._headerDict;
+Object.defineProperties(Headers.prototype, {
+  toDict: {
+    value: function () {
+      var dict = {},
+        iterator = this.keys(),
+        key;
+      while ((key = iterator.next().value)) {
+        dict[key] = this.get(key);
+      }
+      return dict;
     }
-});
-
-Headers.prototype.append = function (name, value) {
-  if (this.headerDict[name]) {
-    this.headerDict[name].push(value);
-  } else {
-    this.headerDict[name] = [value];
   }
-};
-
-Headers.prototype.delete = function (name) {
-  delete this.headerDict[name];
-};
-
-Headers.prototype.get = function (name) {
-  return this.headerDict[name] ? this.headerDict[name][0] : null;
-};
-
-Headers.prototype.getAll = function (name) {
-  return this.headerDict[name] ? this.headerDict[name] : null;
-};
-
-Headers.prototype.has = function (name, value) {
-  return this.headerDict[name] !== undefined;
-};
-
-Headers.prototype.set = function (name, value) {
-  this.headerDict[name] = [value];
-};
-
-Headers.prototype.forEach = function (callback) {
-    var self = this,
-        keys = Object.keys(this.headerDict);
-    keys.forEach(function (key) {
-        callback(self.headerDict[key], key);
-    });
-}
+});
 
 Request = function (url, options) {
   options = options || {};
   this.url = URL.absoluteURLfromMainClient(url);
   this.method = options.method || "GET";
-  this.headers = options.headers || new Headers({});
+  this.headers = options.headers instanceof Headers ? options.headers :
+    options.headers ? new Headers(options.headers) :
+    new Headers({});
+};
+
+Request.prototype.toDict = function () {
+  return {
+    url: this.url,
+    method: this.method,
+    headers: this.headers && this.headers.toDict()
+  };
 };
 
 //TODO Implement abort
@@ -137,27 +113,49 @@ Request.create = function (method, url, headers) {
 
 
 function createResponse(body, url, status, headers) {
-    return  new Response(body, {
-        url: url,
-        status: status,
-        headers: headers
-    });
+  return new Response(body, {
+    url: url,
+    status: status,
+    headers: headers
+  });
 }
 
 Response.prototype.toDict = function () {
-  return {
-    "body": window.btoa(this.body),
-    "url": this.url,
-    "status": this.status,
-    "headers": this.headers
-  };
+  var self = this;
+  return this.base64EncodedString().then(function (base64String) {
+    return {
+      url: self.url,
+      body: base64String,
+      headers: mapHeadersToPOJO(self.headers),
+      status: self.status
+    };
+  });
 };
+
+function arrayBufferToBase64String(arrayBuffer) {
+  var array = new Uint8Array(arrayBuffer),
+    string = "",
+    i, n;
+  for (i = 0, n = array.length; i < n; ++i) {
+    string += String.fromCharCode(array[i]);
+  }
+  return string;
+}
+
+Response.prototype.base64EncodedString = function () {
+  if (!this._base64EncodedString) {
+    this._base64EncodedString = this.arrayBuffer().then(function (arrayBuffer) {
+      return arrayBufferToBase64String(arrayBuffer);
+    });
+  }
+  return this._base64EncodedString;
+}
 
 var protocolRegexp = /^^(file|https?)\:\/\//;
 URL.absoluteURLfromMainClient = function (url) {
   var baseURL = window.mainClientURL || window.location.href;
   url = protocolRegexp.test(url) ? url : new URL(url, baseURL).toString();
-   return url;
+  return url;
 };
 // This function returns a promise with a response for fetching the given resource.
 function fetch(input) {
@@ -183,16 +181,17 @@ function fetch(input) {
   return new Promise(function (innerResolve, reject) {
     // Wrap the resolve callback so we can decode the response body.
     var resolve = function (response) {
-        var body;
-        if (url.endsWith(".js")) {
-            body = response.body;
-        } else {
-            body = window.atob(response.body);
-        }
+      var body;
+      if (url.endsWith(".js")) {
+        body = response.body;
+      } else {
+        body = window.atob(response.body);
+      }
+    
       var jsResponse = new createResponse(body, response.url, response.status, response.headers);
-        if (jsResponse.status < 200 || jsResponse.status >= 400) {
-          console.error("Fetch failed with status (" + jsResponse.status + ") for url: " + jsResponse.url);
-        }
+      if (jsResponse.status < 200 || jsResponse.status >= 400) {
+        console.error("Fetch failed with status (" + jsResponse.status + ") for url: " + jsResponse.url);
+      }
       innerResolve(jsResponse);
     };
 
@@ -204,7 +203,7 @@ handleTrueFetch = function (method, url, headers, resolve, reject) {
   var message = {
     method: method,
     url: url,
-    headers: headers
+    headers: headers instanceof Headers ? mapHeadersToPOJO(headers) : headers
   };
 
   cordovaExec("trueFetch", message, function (response, error) {
@@ -217,50 +216,33 @@ handleTrueFetch = function (method, url, headers, resolve, reject) {
   });
 }
 
-function mapHeadersToPOJO (headers) {
+function mapHeadersToPOJO(headers) {
   var dict = {},
-      keys = headers.keys(),
-      key;
-      
+    keys = headers.keys(),
+    key;
+
   while ((key = keys.next().value)) {
-      dict[key] = headers.get(key);
+    dict[key] = headers.get(key);
   }
   return dict;
 }
 
-function arrayBufferToBase64String (arrayBuffer) {
-    var array = new Uint8Array(arrayBuffer),
-        string = "",
-        i, n;
-    for (i = 0, n = array.length; i < n; ++i) {
-        string += String.fromCharCode(array[i]);
-    }
-    return string;
-}
 
 handleFetchResponse = function (requestId, response) {
-  return response.arrayBuffer().then(function (arrayBuffer) {
-    var message;
-      try {
-          var base64String = arrayBufferToBase64String(arrayBuffer),
-              headerDict = mapHeadersToPOJO(response.headers);
-              message = {
-                requestId: requestId,
-                response: {
-                    url: response.url,
-                    body: base64String,
-                    headers: headerDict
-                }
-              };
-      } catch (e) {
-          message = {
-            error: e.message,
-            stack: e.stack
-          };
-      }
-      cordovaExec("fetchResponse", message, function (response, error) {
-        //intentionally noop
-      });
+  return response.toDict().then(function (response) {
+    return {
+      requestId: requestId,
+      response: response
+    };
+  }).catch(function (e) {
+    return {
+      error: e.message,
+      stack: e.stack
+    };
+  }).then(function (message) {
+    cordovaExec("fetchResponse", message, function (response, error) {
+      //intentionally noop
+    });
   });
 };
 
@@ -269,13 +251,13 @@ handleFetchDefault = function (requestId, request) {
     requestId: requestId,
     request: request
   };
- 
+
   cordovaExec("fetchDefault", message, function (response, error) {
     //intentionally noop
-      if (error) {
-        reject(error);
-      } else {
-        resolve(response);
-      }
+    if (error) {
+      reject(error);
+    } else {
+      resolve(response);
+    }
   });
 };

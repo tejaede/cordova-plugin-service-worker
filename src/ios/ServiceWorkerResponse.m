@@ -38,11 +38,17 @@
 
 + (ServiceWorkerResponse *)responseFromJSValue:(JSValue *)jvalue
 {
-    NSString *url = [jvalue[@"url"] toString];
-    NSString *body = [jvalue[@"body"] toString];
-    NSData *decodedBody = [[NSData alloc] initWithBase64EncodedString:body options:0];
-    NSNumber *status = [jvalue[@"status"] toNumber];
-    NSDictionary *headers = [jvalue[@"headers"][@"headerDict"] toDictionary];
+    NSString *url = jvalue[@"url"];
+    NSString *body = jvalue[@"body"];
+    NSData *decodedBody = [[NSData alloc] initWithBase64EncodedString:body options:NSDataBase64Encoding64CharacterLineLength];
+    if (body != nil && decodedBody == nil) {
+        decodedBody = [body dataUsingEncoding:NSDataBase64Encoding64CharacterLineLength];
+    }
+    
+//    NSNumber *status = [jvalue[@"status"] toNumber];
+    NSNumber *status = jvalue[@"status"];
+    NSDictionary *headers = jvalue[@"headers"];
+//    NSDictionary *headers = [jvalue[@"headers"] toDictionary];
     return [[ServiceWorkerResponse alloc] initWithUrl:url body:decodedBody status:status headers:headers];
 }
 
@@ -66,6 +72,9 @@
             encodedBody = [[NSString alloc] initWithData:self.body encoding:NSUTF8StringEncoding];
         } else {
             encodedBody = [self.body base64EncodedStringWithOptions: 0];
+        }
+        if (encodedBody == nil) {
+            NSLog(@"SWR.toDictionary: %@ %@ %@", [self url], [self status], encodedBody);
         }
         return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new]] forKeys:@[@"url", @"body", @"status", @"headers"]];
     }

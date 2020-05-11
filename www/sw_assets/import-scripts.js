@@ -1,29 +1,64 @@
 var globalEval = eval;
-window.importScripts = importScripts = function importer() {
+var importScriptsRegexp = /importScripts\(['"]([^\"\'\)]*)['"]\)/g;
+function parseDependencies(responseText, debug) {
+    var matches = responseText.matchAll(importScriptsRegexp),
+        scripts = [], match;    
+    while ((match = matches.next().value)) {
+        scripts.push(match[1]);
+    }
+    return scripts;
+}
 
-    var urls = [].slice.call(arguments).filter(function (arg) {
-        return (typeof arg === 'string');
+var scriptsByPath = {};
+function preImportScripts(src) {
+    return window.fetch(src).then(function (response) {
+        return response.text();
+    }).then(function (text) {
+        var dependencies = parseDependencies(text, src.indexOf("bundle") !== -1);
+        scriptsByPath[src] = text;
+        return Promise.all(dependencies.map(function (dependency) {
+            return preImportScripts(dependency);
+        })).then(function () {
+            return text;
+        });
     });
-    // Sync get each URL and return as one string to be eval'd.
-    // These requests are done in series. TODO: Possibly solve?
-    return urls.map(function(url) {
-        var absoluteUrl = URL.absoluteURLfromMainClient(url),
-            xhr = new XMLHttpRequest();
-        xhr.open('GET', absoluteUrl, false);
-        xhr.setRequestHeader("x-import-scripts", "true");
-        xhr.send(null);
-        xhr.status = parseInt(xhr.status, 10);
-        if (xhr.status === 200) {
-            try {
-                globalEval(xhr.responseText);
-            } catch (e) {
-                console.error("Faild to evaluate javascript: " + url);
-                console.error(e);
-            }
-            
-            return xhr.responseText;
-        } else {
-            throw new Error('Network error while calling importScripts() (code: '+ xhr.status + ", url: " + absoluteUrl + ")");
-        }
-    });
+}
+
+window.collected = {};
+//[TJ] This allows one to collect scripts "imported" with a 
+// variable, but it's brittle.
+function collectImports(text) {
+    var script = `(function () {
+        window.importScripts = function (src) {
+            window.collected[src] = true;
+        };
+        ${text};
+    })()`;
+    try {
+        globalEval(script);
+    } catch (e) {
+        console.error(e);
+    }
+    console.log(window.collected);
+    debugger;
+}
+
+function evaluateScript(script, name) {
+    try {
+        globalEval(script);
+    } catch (e) {
+        console.error("Failed to evaluate javascript: " + name);
+        console.error(e);
+    }
+}
+
+window.importScripts = function (src) {
+    if (scriptsByPath[src]) {
+        evaluateScript(scriptsByPath[src], src);
+    } else {
+        //This should only happen on the initial script
+        return this.preImportScripts(src).then(function (text) {
+            evaluateScript(text);
+        });
+    }
 };

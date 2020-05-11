@@ -21,7 +21,7 @@
             string += indent;
             string += key;
             string += ": ";
-            string += item[value];
+            string += item[key];
             string += ",";
             string += "\n";
         });

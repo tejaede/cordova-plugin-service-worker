@@ -16,19 +16,18 @@
  specific language governing permissions and limitations
  under the License.
  */
-/* Required to test in swift*/
-#import "CDVServiceWorker.h"
-#import "ServiceWorkerResponse.h"
 
+#import <Foundation/Foundation.h>
+#import <CoreData/CoreData.h>
 
-@interface FetchInterceptorProtocol : NSURLProtocol {}
+@class ServiceWorkerCache;
 
-+ (BOOL)canInitWithRequest:(NSURLRequest *)request;
-- (void)handleAResponse:(NSURLResponse *)response withSomeData:(NSData *)data;
-- (void)passThrough;
+@interface ServiceWorkerCacheEntry : NSManagedObject
 
-@property (nonatomic, retain) NSURLConnection *connection;
-@property (nonatomic, retain) ServiceWorkerResponse *serviceWorkerResponse;
-@property (nonatomic, retain) NSMutableData *responseData;
+@property (nonatomic, retain) NSString * query;
+@property (nonatomic, retain) NSData * request;
+@property (nonatomic, retain) NSData * response;
+@property (nonatomic, retain) NSString * url;
+@property (nonatomic, retain) ServiceWorkerCache *cache;
 
 @end

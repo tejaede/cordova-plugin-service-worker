@@ -12,22 +12,33 @@
 
         if (handlerForAction) {
             messageId = nextMessageId();
-            messages[messageId] = callback;
+            messages[messageId] = {
+                action: action,
+                callback: callback
+            };
             parameters.messageId = messageId;
-            handlerForAction.postMessage(parameters);
+            try {
+                handlerForAction.postMessage(parameters);
+            } catch (e) {
+                console.error("cordovaExec failed on action: " + action);
+                console.error(e);
+            }
+            
         } else {
             console.error("Failed to execute '" + action + "' because it does not exist in window.webkit.messageHandlers");
         }
     };
 
     window.cordovaCallback = function (messageId, parameters, error) {
-            var callback = messages[messageId];
+            var handler = messages[messageId],
+                callback = handler && handler.callback;
             try {
                 if (callback) {
                     callback(parameters, error);
                     delete messages[messageId];
                 }
             } catch (e) {
+                console.error("cordovaCallback failed on action: " + (handler && handler.action));
                 console.error(e);
             }
     };
