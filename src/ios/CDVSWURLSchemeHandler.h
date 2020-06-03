@@ -7,13 +7,20 @@
 
 #import <Webkit/WKURLSchemeHandler.h>
 #import "CDVSWRequestQueueProtocol.h"
+#import "CDVSWURLSchemeHandlerDelegate.h"
+
+
 
 @interface CDVSWURLSchemeHandler : NSObject <WKURLSchemeHandler>
 
-@property (strong, nonatomic) id <CDVSWRequestQueueProtocol> queueHandler;
+@property (strong, nonatomic) id <CDVSWRequestQueueProtocol> queueHandler; // TODO Queue handler replaced by another delegate? Merged into queue delegate?
+@property (strong, nonatomic) id <CDVSWURLSchemeHandlerDelegate> delegate;
+
+@property (strong, nonatomic) NSMutableDictionary *tasks;
+@property (strong, nonatomic) NSMutableDictionary *requests;
 
 - (void) sendRequestWithId: (NSString *) requestId;
-- (void) completeTaskWithId: (NSNumber *) taskId response: (NSURLResponse *) response data: (NSData *) data error: (NSError *) error;
+- (void) completeTaskWithId: (NSNumber *) taskId response: (NSHTTPURLResponse *) response data: (NSData *) data error: (NSError *) error;
 
 @end
 

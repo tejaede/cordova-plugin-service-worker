@@ -12,7 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @protocol CDVSWRequestQueueProtocol <NSObject>
 
-- (void)addRequestToQueue:(ServiceWorkerRequest *)request;
+- (Boolean)addRequestToQueue:(ServiceWorkerRequest *)request;
 - (Boolean)canAddToQueue;
 
 @end

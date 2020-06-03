@@ -480,55 +480,33 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
             }
             [request setValue: value forHTTPHeaderField:key];
         }
-//        if ([NSThread isMainThread]) {
-//            //Switch to for lopp
-//            for (NSString* key in headers) {
-//                id value = headers[key];
-//                [request setValue: value forHTTPHeaderField:key];
-//            }
-//            [headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL* stop) {
-//                if([value isKindOfClass:[NSArray class]]){
-//                    value = [value objectAtIndex:0];
-//                }
-//                [request addValue:value forHTTPHeaderField:key];
-//            }];
-//        } else {
-//            [NSThread performSelectorOnMainThread:@selector(enumerateKeysAndObjectsUsingBlock:) withObject:^(NSString *key, NSString *value, BOOL* stop) {
-//                [request addValue:value forHTTPHeaderField:key];
-//            } waitUntilDone:NO];
-//        }
     };
 
-    
-    [NSURLProtocol setProperty:@YES forKey:@"PureFetch" inRequest:request];
 
-    // Create a connection and send the request.
-    FetchConnectionDelegate *delegate = [FetchConnectionDelegate new];
-    delegate.resolve = ^(ServiceWorkerResponse *response) {
-        NSDictionary *responseDict = [response toDictionary];
-        [self sendResultToWorker:messageId parameters: responseDict];
-    };
-    delegate.reject = ^(NSError *error) {
-        [self sendResultToWorker:messageId parameters: nil withError: error];
-    };
-    [NSURLConnection connectionWithRequest:request delegate:delegate];
+    NSURLSession *session = [NSURLSession sharedSession];
+    NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        ServiceWorkerResponse *swResponse = [ServiceWorkerResponse responseWithHTTPResponse:httpResponse andBody:data];
+        if (error != nil) {
+            NSLog(@"True Fetch Failed: %@", [error localizedDescription]);
+            [self sendResultToWorker:messageId parameters: nil withError: error];
+        } else {
+            if (isImportScriptRequest) {
+                NSLog(@"Cache Import Scripts: %@", origUrl);
+                [[self cacheApi] putInternal:request swResponse:swResponse];
+            }
+            NSDictionary *responseDict = [swResponse toDictionary];
+            [self sendResultToWorker:messageId parameters: responseDict];
+        }
+    }];
+    [dataTask resume];
 }
 
 
 - (void)handleFetchDefaultScriptMessage: (WKScriptMessage *) message {
     NSDictionary *body = [message body];
-    NSNumber *messageId = [body valueForKey:@"messageId"];
     NSString *jsRequestId = [body valueForKey:@"requestId"];
-//    NSURLRequest* request = [requestsById valueForKey:jsRequestId];
-//    FetchConnectionDelegate *delegate = [FetchConnectionDelegate new];
-//    delegate.resolve = ^(ServiceWorkerResponse *response) {
-//        NSDictionary *responseDict = [response toDictionary];
-//        [self sendResultToWorker:messageId parameters: responseDict];
-//    };
-//    delegate.reject = ^(NSError *error) {
-//        [self sendResultToWorker:messageId parameters: nil withError: error];
-//    };
-//    [NSURLConnection connectionWithRequest:request delegate:delegate];
+
     [mainUrlSchemeHandler sendRequestWithId: jsRequestId];
 }
 
