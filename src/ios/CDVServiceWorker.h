@@ -25,6 +25,7 @@
 #import "CDVSWRequestQueueProtocol.h"
 #import "CDVSWURLSchemeHandler.h"
 #import "ServiceWorkerRequest.h"
+#import "CDVSWURLSchemeHandlerDelegate.h"
 
 
 extern NSString * const SERVICE_WORKER;
@@ -44,36 +45,18 @@ extern NSString * const REGISTRATION_KEY_WAITING;
 extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 
 //@interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
-@interface CDVServiceWorker : CDVPlugin <WKUIDelegate, CDVJavaScriptEvaluator, WKNavigationDelegate, WKScriptMessageHandler, CDVSWRequestQueueProtocol> {}
-
-+ (CDVServiceWorker *)instanceForRequest:(NSURLRequest *)request;
-+ (CDVServiceWorker *)getSingletonInstance;
-
-- (void)addRequestToQueue:(NSURLRequest *)request withId:(NSNumber *)requestId delegateTo:(CDVSWURLSchemeHandler *)handler;
-- (void)addRequestToQueue:(ServiceWorkerRequest *) swRequest;
-- (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl;
-- (void)createServiceWorkerClientWithUrl:(NSString *)url;
-- (void)createServiceWorkerRegistrationWithScriptUrl:(NSString *)scriptUrl scopeUrl:(NSString *)scopeUrl;
-- (void)installServiceWorker:(void(^)())handler;
-- (void)activateServiceWorker;
-- (void)initiateServiceWorker;
-- (NSString *) handlerNameForMessage: (WKScriptMessage *) message;
-- (void) handleLogScriptMessage: (WKScriptMessage *) message;
-- (void) sendResultToWorker:(NSNumber*) messageId parameters:(NSDictionary *)parameters;
+@interface CDVServiceWorker : CDVPlugin <WKUIDelegate, CDVJavaScriptEvaluator, WKNavigationDelegate, WKScriptMessageHandler, CDVSWRequestQueueProtocol, CDVSWURLSchemeHandlerDelegate> {}
 
 @property (nonatomic, retain) CDVBackgroundSync *backgroundSync;
-@property (nonatomic, retain) JSContext *context;
-@property (nonatomic, retain) WKWebView *workerWebView;
-@property (nonatomic, retain) NSMutableDictionary *requestDelegates;
+@property (nonatomic, retain) ServiceWorkerCacheApi *cacheApi;
+@property (nonatomic, copy) void (^initiateHandler)();
 @property (nonatomic, retain) NSMutableArray *requestQueue;
 @property (nonatomic, retain) NSDictionary *registration;
-@property (nonatomic, retain) NSString *serviceWorkerScriptFilename;
-@property (nonatomic, retain) ServiceWorkerCacheApi *cacheApi;
-@property (nonatomic, retain) NSMutableSet *serviceWorkerAssets;
+@property (nonatomic, retain) WKWebView *workerWebView;
 
-@property (nonatomic) Boolean *isServiceWorkerActive;
-@property (nonatomic, copy) void (^initiateHandler)();
-//@property (nonatomic, copy) void (^serviceWorkerLoadedHandler)();
+- (void) handleLogScriptMessage: (WKScriptMessage *) message;
+- (NSString *) handlerNameForMessage: (WKScriptMessage *) message;
+- (void) sendResultToWorker:(NSNumber*) messageId parameters:(NSDictionary *)parameters;
 
 @end
 
