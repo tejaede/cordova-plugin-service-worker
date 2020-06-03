@@ -1,0 +1,157 @@
+#!/usr/bin/env node
+
+
+
+/**************
+ * Author: thomas.jaede@tenefit.com
+ * Jun 2 2020
+ * 
+ * This script watches the plugin's javascript files and
+ * and writes changes to the ios build directory of an application
+ * provided as an argument. This allows a developer to make changes 
+ * directly in the plugin project and see them reflected in the iOS 
+ * build.
+ * 
+ * Known limitations:
+ * - This has only been tested with with cordova-ios 4.5.4
+ * 
+ * 
+ */
+
+/***
+ * Dependencies
+ */
+const {
+  xmlHelpers
+} = require("cordova-common"),
+  fs = require("fs"),
+  path = require("path"),
+  watch = require('node-watch'),
+  yargs = require('yargs');
+
+
+/***
+ * Constants
+ */
+const PROJECT_DIR = process.cwd();
+const PARENT_DIR = path.join(PROJECT_DIR, "../");
+const PLUGIN_CONFIG_RELATIVE_PATH = "plugin.xml";
+const PLUGIN_ASSETS_RELATIVE_PATH = "www";
+const APP_IOS_RELATIVE_PATH = "platforms/ios/";
+const APP_WEB_RELATIVE_PATH = "web/";
+
+/***
+ * Utils
+ */
+makeApplicationContextForPath = (options) => {
+  const absoluteApplicationPath = path.join(PROJECT_DIR, options.application),
+    packageJson = require(path.join(absoluteApplicationPath, "package.json")),
+    webRelativePath = options.web || APP_WEB_RELATIVE_PATH;
+
+  return {
+    iosBuild: path.join(absoluteApplicationPath, APP_IOS_RELATIVE_PATH),
+    name: packageJson.displayName,
+    root: absoluteApplicationPath,
+    web: path.join(absoluteApplicationPath, webRelativePath)
+  };
+};
+
+parseSourceMapsFromPluginContext = (pluginConfiguration) => {
+  const pluginName = pluginConfiguration.getroot().attrib.id;
+  const jsModules = pluginConfiguration.findall("js-module");
+  const assets = pluginConfiguration.findall("asset");
+  const sourceMap = {};
+  jsModules.forEach((jsModuleElement) => {
+    /*
+      Null means the file belongs under plugins/ in the build
+    */
+    const module = jsModuleElement.attrib.src;
+    sourceMap[jsModuleElement.attrib.src] = [path.join("plugins", pluginName, module)];
+  });
+
+  assets.forEach((assetElement) => {
+    if (!sourceMap[assetElement.attrib.src]) {
+      sourceMap[assetElement.attrib.src] = [];
+    }
+    sourceMap[assetElement.attrib.src].push(assetElement.attrib.target);
+  });
+  return sourceMap;
+};
+
+
+/***
+ * Logic
+ */
+const options = yargs
+  .usage("Usage: -a <application> -w <web>")
+  .option("a", {
+    alias: "application",
+    describe: "Path to the test application",
+    type: "string",
+    demandOption: true
+  })
+  .option("w", {
+    alias: "web",
+    describe: "Path to the web directory",
+    type: "string",
+    demandOption: false
+  })
+  .argv;
+
+const appContext = makeApplicationContextForPath(options);
+const pluginAssetsPath = path.join(PROJECT_DIR, PLUGIN_ASSETS_RELATIVE_PATH);
+const pluginConfiguration = xmlHelpers.parseElementtreeSync(PLUGIN_CONFIG_RELATIVE_PATH);
+const sourceMap = parseSourceMapsFromPluginContext(pluginConfiguration);
+
+console.log("Syncing plugin with application ", appContext.root);
+
+const buildOnlyAssetRegexp = /(sw_assets|sw_templates)/;
+const cordovaWrapperRegexp = /^(cordova\.define\(\"cordova-plugin-service-worker\.\S*\",\s*function\(require,\sexports,\smodule\)\s*\{)\n(?:.*\n)*(\s*\}\);)$/m;
+updateTargetWithContent = (target, content) => {
+  try {
+    const targetContent = fs.readFileSync(target, "utf8");
+    const match = cordovaWrapperRegexp.exec(targetContent);
+    let newContent;
+    if (match) {
+      newContent = match[1] + "\n";
+      newContent += content + "\n";
+      newContent += match[2] + "\n";
+    } else {
+      newContent = content;
+    }
+    fs.writeFileSync(target, newContent, "utf8");
+  } catch (e) {
+    console.warn("Failed to write content to " + target);
+    console.warn(e);
+  }
+};
+
+function logChanges(source, targets) {
+  console.log("Changes in (" + source.replace(PARENT_DIR, "") + ") synced to...");
+  targets.forEach((target) => {
+    console.log("   " + target.replace(PARENT_DIR, ""));
+  });
+
+}
+
+
+watch(pluginAssetsPath, {
+  recursive: true
+}, (event, absoluteSource) => {
+  const relativeSource = absoluteSource.replace(PROJECT_DIR + "/", "");
+  const targets = sourceMap[relativeSource];
+  let sourceContent = fs.readFileSync(absoluteSource, "utf8"),
+    changedTargets = [];
+
+  targets.forEach(function (target) {
+    let absolute = path.join(appContext.iosBuild, "www", target);
+    updateTargetWithContent(absolute, sourceContent);
+    changedTargets.push(absolute);
+    if (!buildOnlyAssetRegexp.test(target)) {
+      absolute = path.join(appContext.web, target);
+      updateTargetWithContent(absolute, sourceContent);
+      changedTargets.push(absolute);
+    }
+  });
+  logChanges(absoluteSource, changedTargets);
+});
