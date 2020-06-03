@@ -28,7 +28,9 @@
 
 + (ServiceWorkerResponse *)responseFromJSValue:(JSValue *)value;
 + (ServiceWorkerResponse *)responseFromDictionary:(NSDictionary *)dictionary;
++ (ServiceWorkerResponse *)responseWithHTTPResponse:(NSHTTPURLResponse *)response andBody: (NSData *) body;
 - (NSDictionary *)toDictionary;
+- (id) initWithUrl:(NSString *)url body:(NSData *)body status:(NSNumber *)status headers:(NSDictionary *)headers;
 
 @end
 

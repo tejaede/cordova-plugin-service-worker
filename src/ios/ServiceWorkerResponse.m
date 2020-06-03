@@ -36,18 +36,26 @@
     return self;
 }
 
++ (ServiceWorkerResponse *)responseWithHTTPResponse:(NSHTTPURLResponse *)response andBody: (NSData *) body
+{
+    NSString *url = [[response URL] absoluteString];
+    NSNumber *status = [NSNumber numberWithInteger:[response statusCode]];
+    NSDictionary *headers = [response allHeaderFields];
+    return [[ServiceWorkerResponse alloc] initWithUrl:url body:body status:status headers:headers];
+}
+
 + (ServiceWorkerResponse *)responseFromJSValue:(JSValue *)jvalue
 {
-    NSString *url = jvalue[@"url"];
-    NSString *body = jvalue[@"body"];
-    NSData *decodedBody = [[NSData alloc] initWithBase64EncodedString:body options:NSDataBase64Encoding64CharacterLineLength];
+    NSString *url = (NSString *)jvalue[@"url"];
+    NSString *body = (NSString *)jvalue[@"body"];
+    NSData *decodedBody = [[NSData alloc] initWithBase64EncodedString:body options:NSDataBase64DecodingIgnoreUnknownCharacters];
     if (body != nil && decodedBody == nil) {
         decodedBody = [body dataUsingEncoding:NSDataBase64Encoding64CharacterLineLength];
     }
     
 //    NSNumber *status = [jvalue[@"status"] toNumber];
-    NSNumber *status = jvalue[@"status"];
-    NSDictionary *headers = jvalue[@"headers"];
+    NSNumber *status = (NSNumber *)jvalue[@"status"];
+    NSDictionary *headers = (NSDictionary *)jvalue[@"headers"];
 //    NSDictionary *headers = [jvalue[@"headers"] toDictionary];
     return [[ServiceWorkerResponse alloc] initWithUrl:url body:decodedBody status:status headers:headers];
 }
@@ -68,15 +76,17 @@
         return nil;
     } else {
         NSString *encodedBody;
-        if ([self.url hasSuffix:@".js"]) {
+        NSNumber *isEncoded = [NSNumber numberWithInt:![self.url hasSuffix:@".js"]];
+        if ([isEncoded isEqualToNumber:@0]) {
             encodedBody = [[NSString alloc] initWithData:self.body encoding:NSUTF8StringEncoding];
-        } else {
+        }
+        if (encodedBody == nil) {
             encodedBody = [self.body base64EncodedStringWithOptions: 0];
         }
         if (encodedBody == nil) {
-            NSLog(@"SWR.toDictionary: %@ %@ %@", [self url], [self status], encodedBody);
+            encodedBody = @"No response";
         }
-        return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new]] forKeys:@[@"url", @"body", @"status", @"headers"]];
+        return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new], [isEncoded stringValue]] forKeys:@[@"url", @"body", @"status", @"headers", @"isEncoded"]];
     }
 }
 
