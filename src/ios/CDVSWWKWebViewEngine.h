@@ -10,7 +10,7 @@
 #ifndef CDVSWWKWebViewEngine_h
 #define CDVSWWKWebViewEngine_h
 
-@interface CDVSWWKWebViewEngine : CDVWKWebViewEngine
+@interface CDVSWWKWebViewEngine : CDVWKWebViewEngine <WKNavigationDelegate>
 
 @end
 

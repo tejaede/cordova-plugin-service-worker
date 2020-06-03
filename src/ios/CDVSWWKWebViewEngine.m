@@ -16,6 +16,9 @@
 - (void)pluginInitialize
 {
     NSLog(@"Using SW WKWebView");
+    
+    WKWebView* wkWebView = (WKWebView*)self.engineWebView;
+    [wkWebView setNavigationDelegate: self];
     [super pluginInitialize];
 }
 
@@ -25,6 +28,7 @@
     configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
     CDVSWURLSchemeHandler *swUrlHandler = [[CDVSWURLSchemeHandler alloc] init];    
     [configuration setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-main"];
+    
     if (settings == nil) {
         return configuration;
     }
@@ -34,6 +38,12 @@
     configuration.suppressesIncrementalRendering = [settings cordovaBoolSettingForKey:@"SuppressesIncrementalRendering" defaultValue:NO];
     configuration.mediaPlaybackAllowsAirPlay = [settings cordovaBoolSettingForKey:@"MediaPlaybackAllowsAirPlay" defaultValue:YES];
     return configuration;
+}
+
+- (void) webView: (WKWebView *) webView didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge *) challenge completionHandler:(nonnull void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler {
+    NSURLCredential * credential = [[NSURLCredential alloc] initWithTrust:[challenge protectionSpace].serverTrust];
+    NSLog(@"SWWKWebViewEngine.didReceiveAuthenticationChallenge");
+    completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
 }
 
 @end
