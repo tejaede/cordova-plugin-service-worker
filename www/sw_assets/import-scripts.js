@@ -1,6 +1,6 @@
 var globalEval = eval;
 var importScriptsRegexp = /importScripts\(['"]([^\"\'\)]*)['"]\)/g;
-function parseDependencies(responseText, debug) {
+function parseDependencies(responseText) {
     var matches = responseText.matchAll(importScriptsRegexp),
         scripts = [], match;    
     while ((match = matches.next().value)) {
@@ -11,10 +11,15 @@ function parseDependencies(responseText, debug) {
 
 var scriptsByPath = {};
 function preImportScripts(src) {
-    return window.fetch(src).then(function (response) {
+    var req = new Request(src, {
+        headers: {
+            "x-import-scripts": true
+        }
+    });
+    return window.fetch(req).then(function (response) {
         return response.text();
     }).then(function (text) {
-        var dependencies = parseDependencies(text, src.indexOf("bundle") !== -1);
+        var dependencies = parseDependencies(text);
         scriptsByPath[src] = text;
         return Promise.all(dependencies.map(function (dependency) {
             return preImportScripts(dependency);
@@ -22,25 +27,6 @@ function preImportScripts(src) {
             return text;
         });
     });
-}
-
-window.collected = {};
-//[TJ] This allows one to collect scripts "imported" with a 
-// variable, but it's brittle.
-function collectImports(text) {
-    var script = `(function () {
-        window.importScripts = function (src) {
-            window.collected[src] = true;
-        };
-        ${text};
-    })()`;
-    try {
-        globalEval(script);
-    } catch (e) {
-        console.error(e);
-    }
-    console.log(window.collected);
-    debugger;
 }
 
 function evaluateScript(script, name) {
