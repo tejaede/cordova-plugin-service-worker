@@ -30,6 +30,7 @@
 -(NSArray *)matchAllForRequest:(NSURLRequest *)request inContext:(NSManagedObjectContext *)moc;
 -(NSArray *)matchAllForRequest:(NSURLRequest *)request withOptions:(/*ServiceWorkerCacheMatchOptions*/NSDictionary *)options inContext:(NSManagedObjectContext *)moc;
 -(void) putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *)response inContext:(NSManagedObjectContext *)moc;
+-(void)putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *)response inContext:(NSManagedObjectContext *)moc error: (NSError * _Nullable *)error;
 -(bool) deleteRequest:(NSURLRequest *)request fromContext:(NSManagedObjectContext *)moc;
 -(NSArray *)requestsFromContext:(NSManagedObjectContext *)moc;
 

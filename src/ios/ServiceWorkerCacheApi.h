@@ -16,6 +16,7 @@
  specific language governing permissions and limitations
  under the License.
  */
+#import <Cordova/CDV.h>
 #import <CoreData/CoreData.h>
 #import <JavaScriptCore/JSContext.h>
 #import "ServiceWorkerResponse.h"
@@ -24,7 +25,7 @@
 
 extern NSString * const SERVICE_WORKER;
 
-@interface ServiceWorkerCacheStorage : NSObject { }
+@interface ServiceWorkerCacheStorage : NSObject {}
 
 -(ServiceWorkerCache*)cacheWithName:(NSString *)cacheName;
 -(BOOL)deleteCacheWithName:(NSString *)cacheName;
@@ -36,10 +37,11 @@ extern NSString * const SERVICE_WORKER;
 @property (nonatomic, retain) NSMutableDictionary *caches;
 @end
 
-@interface ServiceWorkerCacheApi : NSObject <WKScriptMessageHandler> {}
+@interface ServiceWorkerCacheApi : CDVPlugin <WKScriptMessageHandler> {}
+
++ (id)sharedCacheApi;
 
 -(id)initWithScope:(NSString *)scope cacheCordovaAssets:(BOOL)cacheCordovaAssets;
--(void)defineFunctionsInContext:(JSContext *)context;
 -(void)registerForJavascriptMessagesForWebView:(WKWebView *) webView;
 -(ServiceWorkerCacheStorage *)cacheStorageForScope:(NSURL *)scope;
 -(BOOL)initializeStorage;
@@ -47,6 +49,9 @@ extern NSString * const SERVICE_WORKER;
 -(ServiceWorkerResponse *) matchRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache;
 -(NSArray *) matchAllForRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache;
 
+- (void)putInternal:(NSURLRequest *)request response: (NSHTTPURLResponse *) response data: (NSData *) data;
+- (void)putInternal:(NSURLRequest *)request swResponse: (ServiceWorkerResponse *) response;
+- (ServiceWorkerResponse *)matchInternal:(NSURLRequest *)request;
 @property (nonatomic, retain) NSMutableDictionary *cacheStorageMap;
 @property (nonatomic) BOOL cacheCordovaAssets;
 @property (nonatomic, retain) NSString *absoluteScope;

@@ -46,12 +46,7 @@
 
 -(NSArray *)entriesMatchingRequestByURL:(NSURL *)url includesQuery:(BOOL)includesQuery inContext:(NSManagedObjectContext *)moc
 {
-    
-    NSLog(@"Find entries in %@ matching url - %@", [self name], [url absoluteString]);
     ServiceWorkerCacheEntry *entry;
-    for (entry in [self entries]) {
-        NSLog(@"Entry - %@", [entry url]);
-    }
     NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
 
     NSEntityDescription *entity = [NSEntityDescription
@@ -125,11 +120,21 @@
             [candidateEntries insertObject:entry atIndex:[candidateEntries count]];
         }
     }
-    NSLog(@"matchAllForRequest returned %lu entries", (unsigned long)[candidateEntries count]);
+
     return candidateEntries;
 }
 
 -(void)putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *)response inContext:(NSManagedObjectContext *)moc
+{
+    
+    NSError *err;
+    [self putRequest:request andResponse:response inContext:moc error:&err];
+    if (err != nil) {
+        NSLog(@"Failed to put request in cache: %@", [err description]);
+    }
+}
+
+-(void)putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *)response inContext:(NSManagedObjectContext *)moc error: (NSError * _Nullable *)error
 {
     
     NSArray *entries  = [self entriesMatchingRequestByURL: request.URL includesQuery:NO inContext:moc];
@@ -149,7 +154,7 @@
     NSError *err;
     [moc save:&err];
     if (err != nil) {
-        NSLog(@"Failed to put request in cache: %@", [err localizedDescription]);
+        NSLog(@"Failed to put request in cache: %@", [err description]);
     }
 }
 

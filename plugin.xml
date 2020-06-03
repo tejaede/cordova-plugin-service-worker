@@ -12,9 +12,15 @@
     <dependency id="cordova-plugin-wkwebview-engine" />
 
     <hook type="after_plugin_install" src="scripts/after-plugin-install.js" />
-    <hook type="after_prepare" src="scripts/after-plugin-install.js" />
+    <hook type="after_prepare" src="scripts/after-plugin-install.js" /> 
 
     <!-- JS modules for use by the plugin (browser env) -->
+    <js-module src="www/cache.js" name="CacheStorage">
+        <clobbers target="caches" />
+    </js-module>
+    <js-module src="www/fetch.js" name="Fetch">
+        <clobbers target="cordovaFetch" />
+    </js-module>
     <js-module src="www/service_worker_container.js" name="ServiceWorkerContainer">
         <clobbers target="navigator.serviceWorker" />
     </js-module>
@@ -28,16 +34,16 @@
         <clobbers target="Kamino" />
     </js-module>
     <js-module src="www/SyncManager.js" name="SyncManager">
-	<clobbers target="SyncManager" />
+	    <clobbers target="SyncManager" />
     </js-module>
     <js-module src="www/PeriodicSyncManager.js" name="PeriodicSyncManager">
-	<clobbers target="PeriodicSyncManager" />
+	    <clobbers target="PeriodicSyncManager" />
     </js-module>
     <js-module src="www/SyncRegistration.js" name="SyncRegistration">
-	<clobbers target="SyncRegistration" />
+	    <clobbers target="SyncRegistration" />
     </js-module>
     <js-module src="www/PeriodicSyncRegistration.js" name="PeriodicSyncRegistration">
-	<clobbers target="PeriodicSyncRegistration" />
+	    <clobbers target="PeriodicSyncRegistration" />
     </js-module>
 
     <!-- Assets for use by the worker (worker env) -->
@@ -45,14 +51,17 @@
     <asset src="www/sw_assets/client.js" target="sw_assets/client.js" />
     <asset src="www/sw_assets/cordova-bridge.js" target="sw_assets/cordova-bridge.js" />
     <asset src="www/sw_assets/event.js" target="sw_assets/event.js" />
-    <asset src="www/sw_assets/fetch.js" target="sw_assets/fetch.js" />
-    <asset src="www/sw_assets/cache.js" target="sw_assets/cache.js" />
+    
     <asset src="www/sw_assets/kamino.js" target="sw_assets/kamino.js" />
     <asset src="www/sw_assets/message.js" target="sw_assets/message.js" />
     <asset src="www/sw_assets/import-scripts.js" target="sw_assets/import-scripts.js" />
     <asset src="www/service_worker_container.js" target="sw_assets/service_worker_container.js" />
     <asset src="www/service_worker_registration.js" target="sw_assets/service_worker_registration.js" />
     <asset src="www/sw_assets/syncevents.js" target="sw_assets/syncevents.js" />
+
+    <!-- Assets for use by both the worker and main thread -->
+    <asset src="www/fetch.js" target="sw_assets/fetch.js" />
+    <asset src="www/cache.js" target="sw_assets/cache.js" />
     <asset src="www/SyncManager.js" target="sw_assets/SyncManager.js" />
     <asset src="www/PeriodicSyncManager.js" target="sw_assets/PeriodicSyncManager.js" />
     <asset src="www/SyncRegistration.js" target="sw_assets/SyncRegistration.js" />
@@ -74,12 +83,17 @@
                 <param name="ios-package" value="CDVServiceWorker" />
                 <param name="onload" value="true" />
             </feature>
+            <feature name="ServiceWorkerCacheApi">
+                <param name="ios-package" value="ServiceWorkerCacheApi" />
+                <param name="onload" value="true" />
+            </feature>
             <feature name="BackgroundSync">
 		        <param name="ios-package" value="CDVBackgroundSync" />
 	        </feature>
             <feature name="CDVSWKWebViewEngine">
 		        <param name="ios-package" value="CDVSWKWebViewEngine" />
 	        </feature>
+            <preference name="CordovaWebViewEngine" value="CDVSWWKWebViewEngine" />
         </config-file>
         <config-file target="*-Info.plist" parent="UIBackgroundModes">
             <array>
@@ -95,10 +109,7 @@
         <source-file src="src/ios/CDVSWWKWebViewEngine.m" />
         <header-file src="src/ios/CDVSWURLSchemeHandler.h" />
         <source-file src="src/ios/CDVSWURLSchemeHandler.m" />
-        <header-file src="src/ios/FetchConnectionDelegate.h" />
-        <source-file src="src/ios/FetchConnectionDelegate.m" />
-        <header-file src="src/ios/FetchInterceptorProtocol.h" />
-        <source-file src="src/ios/FetchInterceptorProtocol.m" />
+        <header-file src="src/ios/CDVSWURLSchemeHandlerDelegate.h" />
         <header-file src="src/ios/ServiceWorkerCache.h" />
         <source-file src="src/ios/ServiceWorkerCache.m" />
         <header-file src="src/ios/ServiceWorkerCacheApi.h" />
