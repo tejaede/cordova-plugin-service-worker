@@ -19,6 +19,9 @@
 @property (strong, nonatomic) NSMutableDictionary *tasks;
 @property (strong, nonatomic) NSMutableDictionary *requests;
 
+
+@property (nonatomic, retain) NSString * scheme;
+
 - (void) sendRequestWithId: (NSString *) requestId;
 - (void) completeTaskWithId: (NSNumber *) taskId response: (NSHTTPURLResponse *) response data: (NSData *) data error: (NSError *) error;
 

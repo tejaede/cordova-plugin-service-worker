@@ -11,12 +11,21 @@
 #import "CDVSWURLSchemeHandler.h"
 #import "CDVServiceWorker.h"
 
+
+//TODO Merge with same two properties in CDVServiceWorker.m
+NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
+
+
 @implementation CDVSWWKWebViewEngine : CDVWKWebViewEngine
+
+@synthesize swUrlScheme = _swUrlScheme;
 
 - (void)pluginInitialize
 {
-    NSLog(@"Using SW WKWebView");
-    
+    CDVViewController *vc = (CDVViewController *)[self viewController];
+    NSMutableDictionary *settings = [vc settings];
+    NSString *configuredURLScheme =  [settings objectForKey:@"serviceworkerurlscheme"];
+    _swUrlScheme = configuredURLScheme != nil ? configuredURLScheme : SERVICE_WORKER_DEFAULT_URL_SCHEME;
     WKWebView* wkWebView = (WKWebView*)self.engineWebView;
     [wkWebView setNavigationDelegate: self];
     [super pluginInitialize];
@@ -27,7 +36,11 @@
     WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
     configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
     CDVSWURLSchemeHandler *swUrlHandler = [[CDVSWURLSchemeHandler alloc] init];    
-    [configuration setURLSchemeHandler:swUrlHandler forURLScheme:@"cordova-main"];
+    if (@available(iOS 11.0, *)) {
+        [configuration setURLSchemeHandler:swUrlHandler forURLScheme: _swUrlScheme];
+    } else {
+        // Fallback on earlier versions
+    }
     
     if (settings == nil) {
         return configuration;

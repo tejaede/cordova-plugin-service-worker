@@ -12,6 +12,8 @@
 
 @interface CDVSWWKWebViewEngine : CDVWKWebViewEngine <WKNavigationDelegate>
 
+@property (nonatomic, retain) NSString *swUrlScheme;
+
 @end
 
 #endif /* CDVSWWKWebViewEngine_h */

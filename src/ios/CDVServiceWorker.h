@@ -53,6 +53,7 @@ extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 @property (nonatomic, retain) NSMutableArray *requestQueue;
 @property (nonatomic, retain) NSDictionary *registration;
 @property (nonatomic, retain) WKWebView *workerWebView;
+@property (nonatomic, retain) NSString *swUrlScheme;
 
 - (void) handleLogScriptMessage: (WKScriptMessage *) message;
 - (NSString *) handlerNameForMessage: (WKScriptMessage *) message;

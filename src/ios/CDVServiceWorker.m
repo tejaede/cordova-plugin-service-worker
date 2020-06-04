@@ -30,8 +30,6 @@
 #import "CDVSWURLSchemeHandler.h"
 
 
-
-
 NSString * const SERVICE_WORKER = @"serviceworker";
 NSString * const SERVICE_WORKER_SCOPE = @"serviceworkerscope";
 NSString * const SERVICE_WORKER_CACHE_CORDOVA_ASSETS = @"cachecordovaassets";
@@ -53,6 +51,8 @@ NSString * const DEFAULT_SERVICE_WORKER_SHELL = @"sw.html";
 
 NSString * const SERVICE_WORKER_ASSETS_RELATIVE_PATH = @"www/sw_assets";
 
+NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
+
 static bool isServiceWorkerActive = NO;
 
 @implementation CDVServiceWorker
@@ -65,52 +65,13 @@ static bool isServiceWorkerActive = NO;
 @synthesize cacheApi = _cacheApi;
 @synthesize initiateHandler = _initiateHandler;
 
-
+@synthesize swUrlScheme = _swUrlScheme;
 
 CDVSWURLSchemeHandler *swUrlSchemeHandler;
 CDVSWURLSchemeHandler *mainUrlSchemeHandler;
 NSString *_clientUrl = nil;
-
-
-- (NSString *)hashForString:(NSString *)string
-{
-    const char *cstring = [string UTF8String];
-    size_t length = strlen(cstring);
-
-    // We're assuming below that CC_LONG is an unsigned int; fail here if that's not true.
-    assert(sizeof(CC_LONG) == sizeof(unsigned int));
-
-    unsigned char hash[33];
-
-    CC_MD5_CTX hashContext;
-
-    // We'll almost certainly never see >4GB files, but loop with UINT32_MAX sized-chunks just to be correct
-    CC_MD5_Init(&hashContext);
-    CC_LONG dataToHash;
-    while (length != 0) {
-        if (length > UINT32_MAX) {
-            dataToHash = UINT32_MAX;
-            length -= UINT32_MAX;
-        } else {
-            dataToHash = (CC_LONG)length;
-            length = 0;
-        }
-        CC_MD5_Update(&hashContext, cstring, dataToHash);
-        cstring += dataToHash;
-    }
-    CC_MD5_Final(hash, &hashContext);
-
-    // Construct a simple base-16 representation of the hash for comparison
-    for (int i=15; i >= 0; --i) {
-        hash[i*2+1] = 'a' + (hash[i] & 0x0f);
-        hash[i*2] = 'a' + ((hash[i] >> 4) & 0x0f);
-    }
-    // Null-terminate
-    hash[32] = 0;
-
-    return [NSString stringWithCString:(char *)hash
-                                          encoding:NSUTF8StringEncoding];
-}
+NSString *swShellFileName = nil;
+NSString *swClientApplicationUrl = nil;
 
 - (void)onReset {
     NSLog(@"CDVServiceWorker.onReset");
@@ -136,33 +97,46 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     resolvePolyfillIsReadyTemplate = [[SWScriptTemplate alloc] initWithFilename:@"resolve-polyfill-is-ready.js"];
 }
 
+- (void) parseServiceWorkerConfigurations
+{
+    CDVViewController *vc = (CDVViewController *)[self viewController];
+    NSMutableDictionary *settings = [vc settings];
+    
+    NSString *configuredURLScheme =  [settings objectForKey:@"serviceworkerurlscheme"];
+    _swUrlScheme = configuredURLScheme != nil ? configuredURLScheme : SERVICE_WORKER_DEFAULT_URL_SCHEME;
+    
+    NSString *applicationURL =  [settings objectForKey:@"remoteapplicationurl"];
+    applicationURL = [applicationURL stringByReplacingOccurrencesOfString:@"https" withString: _swUrlScheme];
+    if ([applicationURL hasSuffix: @"/"]) {
+        applicationURL = [applicationURL substringToIndex: [applicationURL length] - 1];
+    }
+    swClientApplicationUrl = applicationURL;
+    
+    NSString *serviceWorkerShell =  [settings objectForKey:@"serviceworkershell"];
+    swShellFileName = serviceWorkerShell != nil ? serviceWorkerShell : DEFAULT_SERVICE_WORKER_SHELL;
+}
+
 - (void)pluginInitialize
 {
+    [self parseServiceWorkerConfigurations];
+
     [self initializeScriptTemplates];
     self.requestQueue = [NSMutableArray new];
 
     WKWebView *mainWebView = (WKWebView *)[[self webViewEngine] engineWebView];
-    mainUrlSchemeHandler = [[mainWebView configuration] urlSchemeHandlerForURLScheme: @"cordova-main"];
+    if (@available(iOS 11.0, *)) {
+        mainUrlSchemeHandler = [[mainWebView configuration] urlSchemeHandlerForURLScheme: _swUrlScheme];
+    } else {
+        // Fallback on earlier versions
+    }
     mainUrlSchemeHandler.queueHandler = self;
+    mainUrlSchemeHandler.scheme = _swUrlScheme;
 
     [self clearBrowserCache];
     [self createNewWorkerWebView];
 }
 
 -(void) createNewWorkerWebView {
-    
-    CDVViewController *vc = (CDVViewController *)[self viewController];
-    NSMutableDictionary *settings = [vc settings];
-    NSString *applicationURL =  [settings objectForKey:@"remoteapplicationurl"];
-    if ([applicationURL hasSuffix: @"/"]) {
-        applicationURL = [applicationURL substringToIndex: [applicationURL length] - 1];
-    }
-//    applicationURL = [applicationURL stringByReplacingOccurrencesOfString:@"https" withString:@"cordova-sw"];
-//    applicationURL = [applicationURL stringByReplacingOccurrencesOfString:@"cordova-main" withString:@"https"];
-    NSString *serviceWorkerShell =  [settings objectForKey:@"serviceworkershell"];
-    if (serviceWorkerShell == nil) {
-        serviceWorkerShell = DEFAULT_SERVICE_WORKER_SHELL;
-    }
 
     // Initialize CoreData for the Cache API.
     self.cacheApi = [[ServiceWorkerCacheApi alloc] initWithScope:@"/" cacheCordovaAssets:false];
@@ -178,7 +152,12 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
     swUrlSchemeHandler =  [[CDVSWURLSchemeHandler alloc] init];
     swUrlSchemeHandler.delegate = self;
-    [config setURLSchemeHandler:swUrlSchemeHandler forURLScheme:@"cordova-main"];
+    swUrlSchemeHandler.scheme = _swUrlScheme;
+    if (@available(iOS 11.0, *)) {
+        [config setURLSchemeHandler:swUrlSchemeHandler forURLScheme:_swUrlScheme];
+    } else {
+        // Fallback on earlier versions
+    }
     [config.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
     self.workerWebView = [[WKWebView alloc] initWithFrame: CGRectMake(0, 0, 0, 0) configuration: config]; // Headless
     
@@ -188,8 +167,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     self.backgroundSync = [self.commandDelegate getCommandInstance:@"BackgroundSync"];
     self.backgroundSync.scriptRunner = self;
     
-    
-//    NSLog(@"createNewWorkerWebView");
 
     [self.viewController.view addSubview:self.workerWebView];
     
@@ -197,15 +174,15 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     [self.workerWebView setNavigationDelegate:self];
     
     NSString *absoluteShellURLString;
-    if (applicationURL != nil) {
-        absoluteShellURLString = [NSString stringWithFormat:@"%@/%@", applicationURL, serviceWorkerShell];
+    if (swClientApplicationUrl != nil) {
+        absoluteShellURLString = [NSString stringWithFormat:@"%@/%@", swClientApplicationUrl, swShellFileName];
         NSURL *url = [NSURL URLWithString: absoluteShellURLString];
 //        NSURLRequest *request = [NSURLRequest requestWithURL: url cachePolicy:NSURLRequestReturnCacheDataElseLoad timeoutInterval:60];
         NSURLRequest *request = [NSURLRequest requestWithURL: url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:60];
         [self.workerWebView loadRequest:request];
     } else {
         NSURL* bundleURL = [NSURL fileURLWithPath:[[NSBundle mainBundle] bundlePath]];
-        NSURL* swShellURL = [bundleURL URLByAppendingPathComponent: [NSString stringWithFormat:@"%@/%@", SERVICE_WORKER_ASSETS_RELATIVE_PATH, serviceWorkerShell]];
+        NSURL* swShellURL = [bundleURL URLByAppendingPathComponent: [NSString stringWithFormat:@"%@/%@", SERVICE_WORKER_ASSETS_RELATIVE_PATH, swShellFileName]];
         [self.workerWebView loadFileURL:swShellURL allowingReadAccessToURL:bundleURL];
     }
 }
@@ -446,8 +423,8 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
         }
     }
     
-    if ([origUrl hasPrefix:@"cordova-main"]) {
-        url = [origUrl stringByReplacingOccurrencesOfString:@"cordova-main:"  withString:@"https:"];
+    if ([origUrl hasPrefix:_swUrlScheme]) {
+        url = [origUrl stringByReplacingOccurrencesOfString:_swUrlScheme  withString:@"https:"];
     } else {
         url = origUrl;
     }
@@ -661,7 +638,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSString *scriptUrl = [command argumentAtIndex:0];
 //    NSDictionary *options = [command argumentAtIndex:1];
     NSString *absoluteScriptUrl = [command argumentAtIndex:2];
-//    absoluteScriptUrl = [absoluteScriptUrl stringByReplacingOccurrencesOfString:@"cordova-main" withString:@"https"];
     NSString *clientURL = [absoluteScriptUrl stringByReplacingOccurrencesOfString:scriptUrl   withString:@""];
     NSLog(@"Register service worker: %@ (for client: %@)", scriptUrl, clientURL);
     
@@ -989,6 +965,46 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     // Clear the queue.
     // TODO: Deal with the possibility that requests could be added during the loop that we might not necessarily want to remove.
     [self.requestQueue removeAllObjects];
+}
+
+- (NSString *)hashForString:(NSString *)string
+{
+    const char *cstring = [string UTF8String];
+    size_t length = strlen(cstring);
+
+    // We're assuming below that CC_LONG is an unsigned int; fail here if that's not true.
+    assert(sizeof(CC_LONG) == sizeof(unsigned int));
+
+    unsigned char hash[33];
+
+    CC_MD5_CTX hashContext;
+
+    // We'll almost certainly never see >4GB files, but loop with UINT32_MAX sized-chunks just to be correct
+    CC_MD5_Init(&hashContext);
+    CC_LONG dataToHash;
+    while (length != 0) {
+        if (length > UINT32_MAX) {
+            dataToHash = UINT32_MAX;
+            length -= UINT32_MAX;
+        } else {
+            dataToHash = (CC_LONG)length;
+            length = 0;
+        }
+        CC_MD5_Update(&hashContext, cstring, dataToHash);
+        cstring += dataToHash;
+    }
+    CC_MD5_Final(hash, &hashContext);
+
+    // Construct a simple base-16 representation of the hash for comparison
+    for (int i=15; i >= 0; --i) {
+        hash[i*2+1] = 'a' + (hash[i] & 0x0f);
+        hash[i*2] = 'a' + ((hash[i] >> 4) & 0x0f);
+    }
+    // Null-terminate
+    hash[32] = 0;
+
+    return [NSString stringWithCString:(char *)hash
+                                          encoding:NSUTF8StringEncoding];
 }
 
 @end

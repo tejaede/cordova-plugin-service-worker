@@ -22,6 +22,8 @@
 @synthesize tasks = _tasks;
 @synthesize requests = _requests;
 
+@synthesize scheme = _scheme;
+
 static atomic_int requestCount = 0;
 
 //NSMutableDictionary *tasks;
@@ -59,8 +61,8 @@ static atomic_int requestCount = 0;
     } else {
         NSMutableURLRequest *httpRequest;
         //map request and send immediately
-        if ([urlString containsString:@"cordova-main"]) {
-            urlString = [urlString stringByReplacingOccurrencesOfString:@"cordova-main:"  withString:@"https:"];
+        if ([urlString containsString:_scheme]) {
+            urlString = [urlString stringByReplacingOccurrencesOfString:_scheme  withString:@"https"];
         }
         httpRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: urlString] cachePolicy: NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1000.0];
         NSDictionary *headers = [schemedRequest allHTTPHeaderFields];
@@ -84,16 +86,16 @@ static atomic_int requestCount = 0;
     NSMutableURLRequest *request = [_requests objectForKey:requestId];
     id <WKURLSchemeTask> task = [_tasks objectForKey:requestId];
     NSURL *url = [request URL];
-    if ([[url scheme] isEqualToString:@"cordova-main"]) {
+    if ([[url scheme] isEqualToString:_scheme]) {
         NSString *urlString = [url absoluteString];
-        urlString = [urlString stringByReplacingOccurrencesOfString:@"cordova-main:"  withString:@"https:"];
+        urlString = [urlString stringByReplacingOccurrencesOfString:_scheme  withString:@"https:"];
         [request setURL: [NSURL URLWithString:urlString]];
     }
     [self sendRequest:request forTask: task];
 }
 
 - (void) sendRequest:(NSMutableURLRequest *) request forTask: (id <WKURLSchemeTask>) task {
-    [self sendRequest:request forTask:task protocol: @"cordova-main" webView:nil];
+    [self sendRequest:request forTask:task protocol: _scheme webView:nil];
 }
 
 - (void) sendRequest:(NSMutableURLRequest *) request forTask: (id <WKURLSchemeTask>) task protocol: (NSString *) protocol webView: (WKWebView *) webView {
