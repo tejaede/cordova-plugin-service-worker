@@ -14,7 +14,18 @@ This plugin adds [Service Worker](https://developer.mozilla.org/en-US/docs/Web/A
    <preference name="RemoteApplicationURL" value="https://example.com/path/to/application/" />
    <preference name="CordovaWebViewEngine" value="CDVSWWKWebViewEngine" />
    ```
-
+6. Add white entries for the custom url scheme. That is either the value of `ServiceWorkerUrlScheme` or `cordova-sw`
+```xml
+    <!-- With default url scheme -->
+    <access origin="cordova-sw://*" />
+    <allow-navigation href="cordova-sw://*" />
+```
+```xml
+    <preference name="ServiceWorkerUrlScheme" value="acme-service-worker" />
+    <!-- With custom url scheme -->
+    <access origin="acme-service-worker://*" />
+    <allow-navigation href="acme-service-worker://*" />
+```
 That's it!  Your calls to the ServiceWorker API should now work.
 
 
