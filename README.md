@@ -21,8 +21,8 @@ This plugin adds [Service Worker](https://developer.mozilla.org/en-US/docs/Web/A
     <allow-navigation href="cordova-sw://*" />
 ```
 ```xml
-    <preference name="ServiceWorkerUrlScheme" value="acme-service-worker" />
     <!-- With custom url scheme -->
+    <preference name="ServiceWorkerUrlScheme" value="acme-service-worker" />
     <access origin="acme-service-worker://*" />
     <allow-navigation href="acme-service-worker://*" />
 ```
