@@ -1,4 +1,4 @@
-if (typeof cordova === "undefined") {
+if (typeof cordova === "undefined") { // SW-Only
 
   FetchEvent = function (eventInitDict) {
     Event.call(this, 'fetch');
@@ -30,7 +30,8 @@ if (typeof cordova === "undefined") {
       }
     });
   };
-  
+
+
   FetchEvent.prototype = Object.create(Event.prototype);
   FetchEvent.constructor = FetchEvent;
 
@@ -41,7 +42,6 @@ if (typeof cordova === "undefined") {
 
     // Store the id locally, for use in the `convertAndHandle` function.
     var requestId = this.__requestId;
-
     var stack = new Error().stack;
 
     // Send the response to native.
@@ -51,6 +51,7 @@ if (typeof cordova === "undefined") {
       } catch (e) {
         console.warn("Failed to decode response body for URL: ", response.url);
       }
+
 
       handleFetchResponse(requestId, response);
     };
@@ -72,16 +73,94 @@ if (typeof cordova === "undefined") {
     });
   };
 
-
   Request = function (url, options) {
     options = options || {};
-    this.url = URL.absoluteURLfromMainClient(url);
+    this.url = URL.absoluteURLFromMainClient(url);
     this.method = options.method || "GET";
     this.headers = options.headers instanceof Headers ? options.headers :
       options.headers ? new Headers(options.headers) :
       new Headers({});
+    this.body = options.body;
   };
 
+
+  var readFileAsArrayBuffer = function (file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function (event) {
+        resolve(event.target.result);
+      };
+      reader.onerror = function (error) {
+        reject(error);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  var _arrayBufferToBase64 = function( buffer ) {
+    var binary = '';
+    var bytes = new Uint8Array( buffer );
+    var len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode( bytes[ i ] );
+    }
+    return window.btoa( binary );
+};
+
+
+  var mapFormDataForKey = function (formData, rawForm, key) {
+    var value = formData.get(key);
+    if (value instanceof File) {
+      return readFileAsArrayBuffer(value).then(function (arrayBuffer) {
+        rawForm[key] = {
+          name: value.name,
+          type: value.type,
+          size: value.size,
+          data: _arrayBufferToBase64(arrayBuffer)
+        };
+        return null;
+      });
+    }
+    rawForm[key] = value;
+    return null;
+  };
+
+  var serializeFormData = function (formData) {
+    // Setup our serialized data
+    var keys = formData.keys(),
+        promises = [],
+        serialized = null,
+        key;
+
+    while ((key = keys.next().value)) {
+      serialized = serialized || {};
+      promises.push(mapFormDataForKey(formData, serialized, key));
+    }
+    return Promise.all(promises).then(function () {
+      return serialized;
+    });
+  };
+
+
+  Request.prototype.text = function () {
+    var serializedBody;
+    if (this.body instanceof FormData) {
+      serializedBody = serializeFormData(this.body);
+    } else if (typeof this.body === "object") {
+      try {
+        serializedBody = JSON.stringify(this.body);
+      } catch (e) {}
+    } else if (typeof this.body === "string") {
+      serializedBody = this.body;
+    }
+    return Promise.resolve(serializedBody || "");
+  };
+
+  Request.prototype.json = function () {
+    return this.text().then(function (text) {
+      return JSON.parse(text);
+    });
+  };
 
 
   //TODO Implement abort
@@ -94,8 +173,16 @@ if (typeof cordova === "undefined") {
     });
   };
 
+  var NativeRequest = Request;
+  Request = function (url, options) {
+    this.url = url;
+    this.options = options;
+  };
+
+
+
   var protocolRegexp = /^^(file|https?)\:\/\//;
-  URL.absoluteURLfromMainClient = function (url) {
+  URL.absoluteURLFromMainClient = function (url) {
     var baseURL = window.mainClientURL || window.location.href;
     url = protocolRegexp.test(url) ? url : new URL(url, baseURL).toString();
     return url;
@@ -104,22 +191,23 @@ if (typeof cordova === "undefined") {
   function fetch(input) {
     // Assume the passed in input is a resource URL string.
     // TODO: What should the default headers be?
-    var method, headers, url;
+    var inputIsRequest = input instanceof Request,
+      body, method, headers, url;
 
-    if (input instanceof Request) {
+    if (inputIsRequest) {
       method = input.method;
       url = input.url;
       headers = input.headers;
     } else if (typeof input === "object") {
       method = input.method;
-      url = URL.absoluteURLfromMainClient(input.url);
+      url = URL.absoluteURLFromMainClient(input.url);
       headers = input.headers;
+      body = input.body;
     } else {
-      url = URL.absoluteURLfromMainClient(input);
+      url = URL.absoluteURLFromMainClient(input);
       method = 'GET';
       headers = {};
     }
-
 
     return new Promise(function (innerResolve, reject) {
       // Wrap the resolve callback so we can decode the response body.
@@ -127,15 +215,25 @@ if (typeof cordova === "undefined") {
         var response = Response.createResponseForServiceWorkerResponse(swResponse);
         innerResolve(response);
       };
-      // Call a native function to fetch the resource.
-      handleTrueFetch(method, url, headers, resolve, reject);
+
+      if (inputIsRequest) {
+        input.text().then(function (body) {
+          // Call a native function to fetch the resource.
+          handleTrueFetch(method, url, headers, body, resolve, reject);
+        });
+      } else {
+        // Call a native function to fetch the resource.
+        handleTrueFetch(method, url, headers, body, resolve, reject);
+      }
     });
   }
-  handleTrueFetch = function (method, url, headers, resolve, reject) {
+
+  handleTrueFetch = function (method, url, headers, body, resolve, reject) {
     var message = {
       method: method,
       url: url,
-      headers: headers instanceof Headers ? mapHeadersToPOJO(headers) : headers
+      headers: headers instanceof Headers ? mapHeadersToPOJO(headers) : headers,
+      body: body
     };
 
     cordovaExec("trueFetch", message, function (response, error) {
@@ -146,7 +244,8 @@ if (typeof cordova === "undefined") {
         resolve(response);
       }
     });
-  }
+  };
+
 
   handleFetchResponse = function (requestId, response) {
     return response.toDict().then(function (response) {
@@ -183,6 +282,7 @@ if (typeof cordova === "undefined") {
   };
 
 }
+// END SW-Only code
 
 Object.defineProperties(Headers.prototype, {
   toDict: {
@@ -209,6 +309,24 @@ function mapHeadersToPOJO(headers) {
   return dict;
 }
 
+
+Request.prototype.formData = function () {
+  var regExp;
+  if (this.body instanceof FormData) {
+    return Promise.resolve(this.body);
+  } else {
+    regExp = /(?:(\w*)=(\w*))/g;
+    return this.text().then(function (text) {
+      var formData = new FormData(),
+        match;
+      while ((match = regExp.exec(text))) {
+        formData.set(match[1], match[2]);
+      }
+      return formData;
+    });
+  }
+};
+
 Request.prototype.toDict = function () {
   return {
     url: this.url,
@@ -217,7 +335,7 @@ Request.prototype.toDict = function () {
   };
 };
 
-Response.create = function(body, url, status, headers) {
+Response.create = function (body, url, status, headers) {
   var response = new Response(body, {
     url: url,
     status: status,
@@ -242,27 +360,28 @@ Response.create = function(body, url, status, headers) {
  * by objective c ServiceWorkerResponse#toDictionary
  */
 Response.createResponseForServiceWorkerResponse = function (serviceWorkerResponse) {
-    var response = null,
-        isEncoded,
-        body;
-   if (serviceWorkerResponse) {
-      isEncoded = serviceWorkerResponse.isEncoded ? parseInt(serviceWorkerResponse.isEncoded) : !serviceWorkerResponse.url.endsWith(".js");
-      body = isEncoded ? window.atob(serviceWorkerResponse.body) : serviceWorkerResponse.body;
-      response = new Response(body, {
-        status: serviceWorkerResponse.status,
-        headers: serviceWorkerResponse.headers
-      });
-      Object.defineProperty(response, "url", {
-        value: serviceWorkerResponse.url
-      });
-   }
-   return response;
+  var response = null,
+    isEncoded,
+    body;
+  if (serviceWorkerResponse) {
+    isEncoded = serviceWorkerResponse.isEncoded ? parseInt(serviceWorkerResponse.isEncoded) : !serviceWorkerResponse.url.endsWith(".js");
+    body = isEncoded ? window.atob(serviceWorkerResponse.body) : serviceWorkerResponse.body;
+    response = new Response(body, {
+      status: serviceWorkerResponse.status,
+      headers: serviceWorkerResponse.headers
+    });
+    Object.defineProperty(response, "url", {
+      value: serviceWorkerResponse.url
+    });
+  }
+  return response;
 };
 
 Response.prototype.serializedBody = function () {
   // return this.url.endsWith(".js") ? this.text() : this.base64EncodedString();
   return this.base64EncodedString();
 };
+
 
 Response.prototype.toDict = function () {
   var self = this;
@@ -275,6 +394,8 @@ Response.prototype.toDict = function () {
     };
   });
 };
+
+
 
 function arrayBufferToBase64String(arrayBuffer) {
   var array = new Uint8Array(arrayBuffer),
@@ -294,3 +415,57 @@ Response.prototype.base64EncodedString = function () {
   }
   return this._base64EncodedString;
 };
+
+var originalFetch = window.fetch;
+window.fetch = function (requestOrURL, init) {
+  var shouldSerializeBody = false,
+      isBodyNativeFormData = false,
+      url, options;
+
+    isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData;
+
+
+    if (requestOrURL instanceof Request) {
+        url = requestOrURL.url;
+        url = url.replace(/https/, "cordova-main");
+        options = requestOrURL;
+    } else {
+        url = requestOrURL.replace(/https/, "cordova-main");
+        options = init;
+    }
+    shouldSerializeBody = options.method === "POST" && !isBodyNativeFormData;
+    if (shouldSerializeBody) {
+      return requestOrURL.arrayBuffer().then(function (arrayBuffer) {
+            console.log("arrayBuffer: ", !!arrayBuffer);
+            var text = arrayBufferToBase64String(arrayBuffer);
+            console.log("processText: ", url, text);
+            options = {
+                method: options.method,
+                headers: options.headers,
+                body: text,
+                referrer: options.referrer,
+                referrerPolicy: options.referrerPolicy,
+                mode: options.mode,
+                credentials: options.credentials,
+                cache: options.cache,
+                redirect: options.redirect,
+                integrity: options.integrity,
+                keepalive: options.keepalive,
+                signal: options.signal
+            };
+            return originalFetch.call(window, url, options);
+        });
+    } else {
+      return originalFetch.call(window, new Request(url, options));
+    }
+};
+
+(function() {
+  var proxied = window.XMLHttpRequest.prototype.open;
+  window.XMLHttpRequest.prototype.open = function() {
+      var url = arguments[1];
+      url = url && url.replace(/https/, "cordova-main");
+      return proxied.apply(this, [].slice.call(arguments));
+  };
+})();
+

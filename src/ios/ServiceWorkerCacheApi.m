@@ -138,8 +138,9 @@ static NSString *rootPath_;
 -(ServiceWorkerResponse *)matchForRequest:(NSURLRequest *)request withOptions:(/*ServiceWorkerCacheMatchOptions*/NSDictionary *)options
 {
     ServiceWorkerResponse *response = nil;
-    for (NSString* cacheName in self.caches) {
-        ServiceWorkerCache* cache = self.caches[cacheName];
+    NSDictionary *caches = [NSDictionary dictionaryWithDictionary:self.caches];
+    for (NSString* cacheName in caches) {
+        ServiceWorkerCache* cache = caches[cacheName];
         response = [cache matchForRequest:request withOptions:options inContext:moc];
         if (response != nil) {
             break;
@@ -304,10 +305,12 @@ static ServiceWorkerCacheApi *sharedInstance;
     cacheEntryEntity.properties = cacheEntryProperties;
     
 //    cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObject: @"url"]];
-    cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObjects: @"url", @"cache", nil]];
+
 
     [entities addObject:cacheEntity];
     [entities addObject:cacheEntryEntity];
+    
+    cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObjects: @"url", @"cache", nil]];
 
     model.entities = entities;
     return model;
@@ -523,11 +526,11 @@ static ServiceWorkerCacheApi *sharedInstance;
     // Check for a match in the cache.
     // TODO: Deal with multiple matches.
     ServiceWorkerResponse *cachedResponse;
-    if (cacheName == nil) {
-        cachedResponse = [cacheStorage matchForRequest:urlRequest];
-    } else {
-        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
-    }
+//    if (cacheName == nil) {
+//        cachedResponse = [cacheStorage matchForRequest:urlRequest];
+//    } else {
+//        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
+//    }
 
     if (cachedResponse == nil) {
         NSString *urlString = [[urlRequest URL] absoluteString];

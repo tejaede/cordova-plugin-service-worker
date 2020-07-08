@@ -16,12 +16,28 @@
  specific language governing permissions and limitations
  under the License.
  */
-
+#import <WebKit/WKURLSchemeTask.h>
 
 @interface ServiceWorkerRequest : NSObject
 
-@property (nonatomic, strong) NSURLRequest *request;
-@property (nonatomic, strong) NSNumber *requestId;
-@property (nonatomic, strong) NSURLProtocol *protocol;
++ (ServiceWorkerRequest *) requestWithURLSchemeTask: (id <WKURLSchemeTask>) schemeTask;
++ (ServiceWorkerRequest *) requestWithDictionary: (NSDictionary *) requestDict;
++ (ServiceWorkerRequest *) requestWithId: (NSNumber *) requestId;
++ (ServiceWorkerRequest *) requestForURLRequest: (NSURLRequest *) urlRequest;
++ (void) closeRequestWithId: (NSNumber *) requestId;
 
++ (void) removeRequestWithId: (NSNumber *) requestId;
+
+@property (class, readonly) NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * requestsById;
+
+@property (nonatomic, strong) NSURLRequest *schemedRequest;
+@property (nonatomic, retain) NSDictionary *schemedRequestDict;
+@property (nonatomic, strong) NSMutableURLRequest *outgoingRequest;
+@property (nonatomic, strong) NSNumber *requestId;
+@property (nonatomic, retain) id <WKURLSchemeTask> schemeTask;
+
+@property (nonatomic, retain) NSURLSessionDataTask *dataTask;
+
+@property BOOL isClosed;
+ 
 @end

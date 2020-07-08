@@ -16,13 +16,11 @@
 @property (strong, nonatomic) id <CDVSWRequestQueueProtocol> queueHandler; // TODO Queue handler replaced by another delegate? Merged into queue delegate?
 @property (strong, nonatomic) id <CDVSWURLSchemeHandlerDelegate> delegate;
 
-@property (strong, nonatomic) NSMutableDictionary *tasks;
-@property (strong, nonatomic) NSMutableDictionary *requests;
-
-
+@property (nonatomic, retain) NSString * allowedOrigin;
 @property (nonatomic, retain) NSString * scheme;
+@property (readonly) NSURLSession* session;
 
-- (void) sendRequestWithId: (NSString *) requestId;
+- (void) sendRequestWithId: (NSNumber *) requestId;
 - (void) completeTaskWithId: (NSNumber *) taskId response: (NSHTTPURLResponse *) response data: (NSData *) data error: (NSError *) error;
 
 @end

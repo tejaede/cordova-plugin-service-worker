@@ -55,6 +55,9 @@ NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
 
 static bool isServiceWorkerActive = NO;
 
+
+bool AUTO_CACHE_ENABLED = YES;
+
 @implementation CDVServiceWorker
 
 @synthesize backgroundSync = _backgroundSync;
@@ -69,7 +72,7 @@ static bool isServiceWorkerActive = NO;
 
 CDVSWURLSchemeHandler *swUrlSchemeHandler;
 CDVSWURLSchemeHandler *mainUrlSchemeHandler;
-NSString *_clientUrl = nil;
+NSURL *_clientUrl = nil;
 NSString *swShellFileName = nil;
 NSString *swClientApplicationUrl = nil;
 
@@ -124,13 +127,11 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     self.requestQueue = [NSMutableArray new];
 
     WKWebView *mainWebView = (WKWebView *)[[self webViewEngine] engineWebView];
-    if (@available(iOS 11.0, *)) {
-        mainUrlSchemeHandler = [[mainWebView configuration] urlSchemeHandlerForURLScheme: _swUrlScheme];
-    } else {
-        // Fallback on earlier versions
-    }
+    mainUrlSchemeHandler = [[mainWebView configuration] urlSchemeHandlerForURLScheme: _swUrlScheme];
     mainUrlSchemeHandler.queueHandler = self;
     mainUrlSchemeHandler.scheme = _swUrlScheme;
+    
+
 
     [self clearBrowserCache];
     [self createNewWorkerWebView];
@@ -173,10 +174,13 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     [self.workerWebView setUIDelegate:self];
     [self.workerWebView setNavigationDelegate:self];
     
-    NSString *absoluteShellURLString;
     if (swClientApplicationUrl != nil) {
-        absoluteShellURLString = [NSString stringWithFormat:@"%@/%@", swClientApplicationUrl, swShellFileName];
-        NSURL *url = [NSURL URLWithString: absoluteShellURLString];
+        NSURL *url = [NSURL URLWithString:swClientApplicationUrl];
+        NSString *extension = [url pathExtension];
+        if ([extension length] != 0) {
+            url = [url URLByDeletingLastPathComponent];
+        }
+        url = [url URLByAppendingPathComponent:swShellFileName];
 //        NSURLRequest *request = [NSURLRequest requestWithURL: url cachePolicy:NSURLRequestReturnCacheDataElseLoad timeoutInterval:60];
         NSURLRequest *request = [NSURLRequest requestWithURL: url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:60];
         [self.workerWebView loadRequest:request];
@@ -376,112 +380,76 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 {
     NSDictionary *body = [message body];
     NSNumber *messageId = [body valueForKey:@"messageId"];
-    NSString *origUrl = [body valueForKey:@"url"];
-    NSString *url;
-    NSString *method = [body valueForKey:@"method"];
-    NSDictionary *headers = [body valueForKey:@"headers"];
-    NSDictionary *headersDict = [headers valueForKey:@"headerDict"];
-    
-    
-    if (headersDict != nil) {
-        headers = headersDict;
-    } else {
-        headersDict = [headers valueForKey:@"_headerDict"];
-        if (headersDict != nil) {
-            headers = headersDict;
-        }
-    }
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSString *internalUrlString = origUrl;
-    
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: origUrl]];
+    ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithDictionary: body];
+    NSURLRequest *request = [swRequest outgoingRequest];
+    NSURL *url = [request URL];
     // fetch() sent directly from the service worker thread does not
     // trigger a fetch event. This means the cache logic in the worker
     // does not have a chance to handle the request. The below
-    // accounts for that by checking the cache itself.
-    ServiceWorkerResponse *response = [[self cacheApi] matchRequest:request inCache:nil];
+    // accounts for that by checking the cache.
+    ServiceWorkerResponse *response;
+    if (AUTO_CACHE_ENABLED) {
+        response = [[self cacheApi] matchRequest:request inCache:nil];
+    }
     if (response != nil) {
         NSDictionary *responseDict = [response toDictionary];
         [self sendResultToWorker:messageId parameters: responseDict];
         return;
     }
-    
-    NSData *script;
+    BOOL isImportScriptRequest = [request valueForHTTPHeaderField:@"x-import-scripts"] != nil;
+    BOOL isScriptOnFileSystem = [[url pathComponents] containsObject: @"packages"] && [[url pathExtension] isEqualToString:@".js"];
     // Specific to Contour Use Case
-    if ([origUrl containsString:@"packages"] && [origUrl hasSuffix:@".js"]) {
-        internalUrlString = [origUrl stringByReplacingOccurrencesOfString:_clientUrl withString:@""];
-        internalUrlString = [NSString stringWithFormat:@"/%@/www/app/%@", [[NSBundle mainBundle] resourcePath], internalUrlString];
-        if ([fileManager fileExistsAtPath:internalUrlString]) {
-            script = [NSData dataWithContentsOfFile:internalUrlString];
-            if (script != nil) {
-                response = [[ServiceWorkerResponse alloc] initWithUrl:origUrl body:script status:@200 headers:[[NSDictionary alloc] init]];
-                NSDictionary *responseDict = [response toDictionary];
-                [self sendResultToWorker:messageId parameters: responseDict];
-                return;
-            }
-            
-        }
-    }
-    
-    if ([origUrl hasPrefix:_swUrlScheme]) {
-        url = [origUrl stringByReplacingOccurrencesOfString:_swUrlScheme  withString:@"https:"];
-    } else {
-        url = origUrl;
-    }
-    
-    
-    // Create the request.
-    request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: url]];
-    
-    
-    BOOL isImportScriptRequest = [headers valueForKey:@"x-import-scripts"] != nil;
-    if (isImportScriptRequest) {
+    if (isScriptOnFileSystem && AUTO_CACHE_ENABLED) {
+        response = [self loadURLFromFileSystem: url];
+    } else if (isImportScriptRequest && AUTO_CACHE_ENABLED) {
         response = [[self cacheApi] matchInternal:request];
     }
+
     if (response != nil) {
-        NSLog(@"Return Cached True Fetch: %@", origUrl);
+        NSLog(@"Return Cached True Fetch: %@", url);
         NSDictionary *responseDict = [response toDictionary];
         [self sendResultToWorker:messageId parameters: responseDict];
-        return;
+    } else {
+        NSURLSession *session = [NSURLSession sharedSession];
+        NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            ServiceWorkerResponse *swResponse = [ServiceWorkerResponse responseWithHTTPResponse:httpResponse andBody:data];
+            if (error != nil) {
+                NSLog(@"True Fetch Failed: %@", [error localizedDescription]);
+                [self sendResultToWorker:messageId parameters: nil withError: error];
+            } else {
+                if (isImportScriptRequest) {
+                    NSLog(@"Cache Import Scripts: %@", url);
+                    [[self cacheApi] putInternal:request swResponse:swResponse];
+                }
+                NSDictionary *responseDict = [swResponse toDictionary];
+                [self sendResultToWorker:messageId parameters: responseDict];
+            }
+        }];
+        [dataTask resume];
     }
-    
-    [request setHTTPMethod:method];
-    if (headers != nil) {
-        for (NSString* key in headers) {
-            id value = headers[key];
-            if([value isKindOfClass:[NSArray class]]){
-                value = [value objectAtIndex:0];
-            }
-            [request setValue: value forHTTPHeaderField:key];
-        }
-    };
-
-
-    NSURLSession *session = [NSURLSession sharedSession];
-    NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        ServiceWorkerResponse *swResponse = [ServiceWorkerResponse responseWithHTTPResponse:httpResponse andBody:data];
-        if (error != nil) {
-            NSLog(@"True Fetch Failed: %@", [error localizedDescription]);
-            [self sendResultToWorker:messageId parameters: nil withError: error];
-        } else {
-            if (isImportScriptRequest) {
-                NSLog(@"Cache Import Scripts: %@", origUrl);
-                [[self cacheApi] putInternal:request swResponse:swResponse];
-            }
-            NSDictionary *responseDict = [swResponse toDictionary];
-            [self sendResultToWorker:messageId parameters: responseDict];
-        }
-    }];
-    [dataTask resume];
 }
 
+
+- (ServiceWorkerResponse *) loadURLFromFileSystem: (NSURL *) url {
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSString* fsString = [[url path] stringByReplacingOccurrencesOfString:[_clientUrl path] withString:@""];
+    NSData *content;
+    ServiceWorkerResponse *response;
+    fsString = [NSString stringWithFormat:@"/%@/www/app/%@", [[NSBundle mainBundle] resourcePath], fsString];
+    if ([fileManager fileExistsAtPath:fsString]) {
+        content = [NSData dataWithContentsOfFile:fsString];
+        if (content != nil) {
+            response = [[ServiceWorkerResponse alloc] initWithUrl:url body:content status:@200 headers:[[NSDictionary alloc] init]];
+        }
+    }
+    return response;
+}
 
 - (void)handleFetchDefaultScriptMessage: (WKScriptMessage *) message {
     NSDictionary *body = [message body];
     NSString *jsRequestId = [body valueForKey:@"requestId"];
-
-    [mainUrlSchemeHandler sendRequestWithId: jsRequestId];
+    [mainUrlSchemeHandler sendRequestWithId: [NSNumber numberWithInteger: [jsRequestId integerValue]]];
 }
 
 
@@ -583,17 +551,18 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
         // The provided scope is ignored; we always set it to the root.
         // TODO: Support provided scopes.
         NSString *scopeUrl = @"/";
-    
+        NSString *currentScriptURL = [self.registration valueForKey:REGISTRATION_KEY_REGISTERING_SCRIPT_URL];
         // If we have a registration on record, make sure it matches the attempted registration.
         // If it matches, return it.  If it doesn't, we have a problem!
         // If we don't have a registration on record, create one, store it, and return it.
-        if (self.registration != nil) {
+        if (self.registration != nil && [currentScriptURL isEqualToString: absoluteScriptUrl]) {
             CDVPluginResult *pluginResult;
-            NSString *currentScriptURL = [self.registration valueForKey:REGISTRATION_KEY_REGISTERING_SCRIPT_URL];
-            if (![currentScriptURL isEqualToString: absoluteScriptUrl]) {
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
-                                                                  messageAsString:[NSString stringWithFormat:@"The script URL doesn't match the existing registration. existing: %@  new: %@", currentScriptURL, scriptUrl]];
-            } else if (![[self.registration valueForKey:REGISTRATION_KEY_SCOPE] isEqualToString:scopeUrl]) {
+//            if (![currentScriptURL isEqualToString: absoluteScriptUrl]) {
+//                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
+//                                                                  messageAsString:[NSString stringWithFormat:@"The script URL doesn't match the existing registration. existing: %@  new: %@", currentScriptURL, scriptUrl]];
+                
+//            }
+            if (![[self.registration valueForKey:REGISTRATION_KEY_SCOPE] isEqualToString:scopeUrl]) {
                 pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
                                                                   messageAsString:@"The scope URL doesn't match the existing registration."];
             } else {
@@ -604,6 +573,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
                 handler(pluginResult);
             }
         } else {
+            if (self.registration) {
+                [self unregisterWorker];
+            }
 //            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 //            bool serviceWorkerInstalled = [defaults boolForKey:SERVICE_WORKER_INSTALLED];
 //            bool serviceWorkerActivated = [defaults boolForKey:SERVICE_WORKER_ACTIVATED];
@@ -652,12 +624,16 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSString *scriptUrl = [command argumentAtIndex:0];
     NSString *scope = [command argumentAtIndex:1];
     NSLog(@"Unregister SW at script URL: %@", scriptUrl);
+    [self unregisterWorker];
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:self.registration];
+    [[self commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
+}
+
+- (void)unregisterWorker {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults removeObjectForKey:REGISTRATION_KEY_REGISTERING_SCRIPT_URL];
     self.registration = nil;
     [self createNewWorkerWebView];
-    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:self.registration];
-    [[self commandDelegate] sendPluginResult:pluginResult callbackId:[command callbackId]];
 }
 
 - (void)createServiceWorkerRegistrationWithScriptUrl:(NSString*)scriptUrl scopeUrl:(NSString*)scopeUrl
@@ -777,7 +753,8 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
 - (void)createServiceWorkerFromScript:(NSString *)script clientUrl:(NSString*)clientUrl
 {
-    _clientUrl = clientUrl;
+    _clientUrl = [NSURL URLWithString: clientUrl];
+   mainUrlSchemeHandler.allowedOrigin = [_clientUrl host];
    NSString *originalLoader = [self readScriptAtRelativePath:@"www/load_sw.js"];
    NSString *processedLoader = [originalLoader stringByReplacingOccurrencesOfString:@"{{SERVICE_WORKER_PATH}}" withString:script];
    [self loadScript:processedLoader];
@@ -821,7 +798,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
 - (void) webView: (WKWebView *) webView didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge *) challenge completionHandler:(nonnull void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler {
     NSURLCredential * credential = [[NSURLCredential alloc] initWithTrust:[challenge protectionSpace].serverTrust];
-    NSLog(@"WorkerWebView didReceiveAuthenticationChallenge");
     completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
 }
 
@@ -844,7 +820,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     // TODO: Move assets up one directory, so they're not in www.
     NSString *assetDirectoryPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/www/sw_assets"];
     
-//    [self evaluateScript: [definePolyfillIsReadyTemplate content]];
     [self evaluateScript:[definePolyfillIsReadyTemplate content] inWebView: self.workerWebView callback: nil];
     
     // Get the list of assets.
@@ -861,10 +836,12 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     }
         for (fileName in assetFilenames) {
         if (![rootSWAssetFileNames containsObject:fileName]) {
-            NSLog(@"load supplemental sw asset: %@", fileName);
-            relativePath = [NSString stringWithFormat:@"www/sw_assets/%@", fileName];
-            script = [self readScriptAtRelativePath:relativePath];
-            [self evaluateScript:script];
+            if (![fileName isEqualToString:@"log.js"]) {
+                NSLog(@"load supplemental sw asset: %@", fileName);
+                relativePath = [NSString stringWithFormat:@"www/sw_assets/%@", fileName];
+                script = [self readScriptAtRelativePath:relativePath];
+                [self evaluateScript:script];
+            }
         }
     }
     
@@ -894,12 +871,11 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     [self loadServiceWorkerAssetsIntoContext];
 
     if (serviceWorkerScriptURL != nil) {
-        CDVServiceWorker * __weak weakSelf = self;
         NSURL *url = [NSURL URLWithString: serviceWorkerScriptURL];
         NSString *relativeURL = [[url pathComponents] lastObject];
         NSString *clientURL = [serviceWorkerScriptURL stringByReplacingOccurrencesOfString:relativeURL withString:@""];
         NSLog(@"Existing Service Worker Registration URL %@ %@ %@", serviceWorkerScriptURL, relativeURL, clientURL);
-        [weakSelf registerWithURL:relativeURL absoluteURL:serviceWorkerScriptURL andClientURL:clientURL handler:nil];
+        [self registerWithURL:relativeURL absoluteURL:serviceWorkerScriptURL andClientURL:clientURL handler:nil];
     }
 }
 
@@ -916,7 +892,11 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 }
 
 - (ServiceWorkerResponse *)urlSchemeHandlerWillSendRequest: (NSURLRequest *) request {
-    return [[self cacheApi] matchInternal:request];
+    ServiceWorkerResponse *response;
+    if (AUTO_CACHE_ENABLED) {
+        response = [[self cacheApi] matchInternal:request];
+    }
+    return response;
 }
 
 
@@ -939,17 +919,18 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
 - (void)processRequestQueue {
     // If the ServiceWorker isn't active, there's nothing we can do yet.
-//    NSLog(@"processRequestQueue");
+
     if (!isServiceWorkerActive) {
+        NSLog(@"CDVServiceWorker cannot process the request queue until the worker is active");
         return;
     }
 
     for (ServiceWorkerRequest *swRequest in self.requestQueue) {
         // Log!
-        NSLog(@"Processing from queue: %@", [[swRequest.request URL] absoluteString]);
+        NSLog(@"Processing from queue: %@", [[swRequest.schemedRequest URL] absoluteString]);
 
         // Fire a fetch event in the JSContext.
-        NSURLRequest *request = swRequest.request;
+        NSURLRequest *request = swRequest.schemedRequest;
         NSString *method = [request HTTPMethod];
         NSString *url = [[request URL] absoluteString];
 

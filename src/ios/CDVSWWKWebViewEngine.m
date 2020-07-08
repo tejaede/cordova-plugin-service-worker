@@ -55,7 +55,7 @@ NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
 
 - (void) webView: (WKWebView *) webView didReceiveAuthenticationChallenge: (NSURLAuthenticationChallenge *) challenge completionHandler:(nonnull void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler {
     NSURLCredential * credential = [[NSURLCredential alloc] initWithTrust:[challenge protectionSpace].serverTrust];
-    NSLog(@"SWWKWebViewEngine.didReceiveAuthenticationChallenge");
+//    NSLog(@"SWWKWebViewEngine.didReceiveAuthenticationChallenge");
     completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
 }
 

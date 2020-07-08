@@ -22,6 +22,7 @@
             } catch (e) {
                 console.error("cordovaExec failed on action: " + action);
                 console.error(e);
+                callback(null, e);
             }
             
         } else {

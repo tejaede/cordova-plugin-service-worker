@@ -11,8 +11,9 @@
     <dependency id="cordova-plugin-network-information" />
     <dependency id="cordova-plugin-wkwebview-engine" />
 
-    <hook type="after_plugin_install" src="scripts/after-plugin-install.js" />
-    <hook type="after_prepare" src="scripts/after-plugin-install.js" /> 
+    <hook type="after_plugin_install" src="scripts/hooks/after-plugin-install.js" />
+    <hook type="after_prepare" src="scripts/hooks/after-plugin-install.js" /> 
+    <hook type="after_build" src="scripts/hooks/after-plugin-build.js" />
 
     <!-- JS modules for use by the plugin (browser env) -->
     <js-module src="www/cache.js" name="CacheStorage">

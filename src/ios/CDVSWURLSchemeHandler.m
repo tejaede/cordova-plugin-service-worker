@@ -18,133 +18,116 @@
 
 @synthesize queueHandler = _queueHandler;
 @synthesize delegate = _delegate;
-
-@synthesize tasks = _tasks;
-@synthesize requests = _requests;
-
 @synthesize scheme = _scheme;
+@synthesize session = _session;
+@synthesize allowedOrigin = _allowedOrigin;
 
-static atomic_int requestCount = 0;
 
-//NSMutableDictionary *tasks;
-//NSMutableDictionary *requests;
-
-- (CDVSWURLSchemeHandler *) init {
-    if (self = [super init]) {
-        _requests = [[NSMutableDictionary alloc] init];
-        _tasks = [[NSMutableDictionary alloc] init];
+- (NSURLSession *) session {
+    if (_session == nil) {
+//        _session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
+        _session = [NSURLSession sharedSession];
     }
-    return self;
+    return _session;
 }
 
 - (void)webView:(WKWebView *)webView startURLSchemeTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
-    NSURL *url = [[urlSchemeTask request] URL];
-    NSString *urlString = [url absoluteString];
-    
-    CDVReachability *reachability  = [CDVReachability reachabilityForInternetConnection];
-    NetworkStatus networkStatus = [reachability currentReachabilityStatus];
-    
-
-    NSLog(@"Handle Schemed URL - %@", urlString);
-    
-    NSMutableURLRequest *schemedRequest = (NSMutableURLRequest *)[urlSchemeTask request];
-
-    
+    NSLog(@"Handle Schemed URL - %@ %@ %@",[[urlSchemeTask request] HTTPMethod],  [[[urlSchemeTask request] URL] absoluteString], self.allowedOrigin);
+    ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithURLSchemeTask:urlSchemeTask];
     if (_queueHandler != nil && [_queueHandler canAddToQueue]) {
-        //add unmapped request to queue
-        [self cacheRequest:schemedRequest andTask:urlSchemeTask];
-        ServiceWorkerRequest *swRequest = [ServiceWorkerRequest new];
-        swRequest.request = schemedRequest;
-        swRequest.requestId = [NSURLProtocol propertyForKey: @"RequestId" inRequest: schemedRequest];
         [_queueHandler addRequestToQueue: swRequest];
     } else {
-        NSMutableURLRequest *httpRequest;
-        //map request and send immediately
-        if ([urlString containsString:_scheme]) {
-            urlString = [urlString stringByReplacingOccurrencesOfString:_scheme  withString:@"https"];
-        }
-        httpRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: urlString] cachePolicy: NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1000.0];
-        NSDictionary *headers = [schemedRequest allHTTPHeaderFields];
-        for (NSString* key in headers) {
-            id value = headers[key];
-            [httpRequest setValue: value forHTTPHeaderField:key];
-        }
-        [self cacheRequest:httpRequest andTask:urlSchemeTask];
-        [self sendRequest:httpRequest forTask: urlSchemeTask];
+        [self sendRequest: [swRequest outgoingRequest] forTask: urlSchemeTask];
     }
 }
 
-- (void) cacheRequest: (NSMutableURLRequest *) request andTask: (id <WKURLSchemeTask>)urlSchemeTask {
-    NSNumber *requestId = [NSNumber numberWithLongLong:atomic_fetch_add_explicit(&requestCount, 1, memory_order_relaxed)];
-    [NSURLProtocol setProperty:requestId forKey:@"RequestId" inRequest:request];
-    [_tasks setObject:urlSchemeTask forKey: [requestId stringValue]];
-    [_requests setObject:request forKey:[requestId stringValue]];
-}
-
-- (void) sendRequestWithId:(NSString *) requestId {
-    NSMutableURLRequest *request = [_requests objectForKey:requestId];
-    id <WKURLSchemeTask> task = [_tasks objectForKey:requestId];
-    NSURL *url = [request URL];
-    if ([[url scheme] isEqualToString:_scheme]) {
-        NSString *urlString = [url absoluteString];
-        urlString = [urlString stringByReplacingOccurrencesOfString:_scheme  withString:@"https:"];
-        [request setURL: [NSURL URLWithString:urlString]];
-    }
-    [self sendRequest:request forTask: task];
+- (void) sendRequestWithId:(NSNumber *) requestId {
+    ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithId: (NSNumber*)requestId];
+    NSLog(@"sendRequestWithId: %@ %@", requestId, [[swRequest schemedRequest] URL]);
+    [self sendRequest:swRequest.outgoingRequest forTask: swRequest.schemeTask];
 }
 
 - (void) sendRequest:(NSMutableURLRequest *) request forTask: (id <WKURLSchemeTask>) task {
-    [self sendRequest:request forTask:task protocol: _scheme webView:nil];
+    [self sendRequest: request forTask:task protocol: _scheme];
 }
 
-- (void) sendRequest:(NSMutableURLRequest *) request forTask: (id <WKURLSchemeTask>) task protocol: (NSString *) protocol webView: (WKWebView *) webView {
-    NSURLSession *session = [NSURLSession sharedSession];
+
+- (void) initiateDataTaskForRequest: (NSURLRequest *) request urlSchemeTask: (id <WKURLSchemeTask>) schemeTask  {
     CDVSWURLSchemeHandler * __weak weakSelf = self;
-    NSMutableURLRequest *schemedRequest = (NSMutableURLRequest *)[task request];
-    NSNumber *requestId = [NSURLProtocol propertyForKey:@"RequestId" inRequest:request];
-    [NSURLProtocol setProperty:requestId forKey:@"RequestId" inRequest:schemedRequest];
-    ServiceWorkerResponse* response = [_delegate urlSchemeHandlerWillSendRequest: schemedRequest];
+    NSMutableURLRequest *schemedRequest = (NSMutableURLRequest *)[schemeTask request];
+    ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestForURLRequest:schemedRequest];
+    NSURLSession *session = [self session];
+    NSLog(@"Send Request: %@ %@", [request HTTPMethod], [[request URL] absoluteString]);
+    NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSLog(@"Complete Task: %@", [[request URL] absoluteString]);
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSMutableDictionary *allHeaders = [NSMutableDictionary dictionaryWithDictionary: [httpResponse allHeaderFields]];
+        //TODO Pass CORS origin in from outside
+        [allHeaders setValue:[NSString stringWithFormat: @"cordova-main://%@", self.allowedOrigin] forKey:@"Access-Control-Allow-Origin"];
+//        [allHeaders setValue:@"cordova-main://mobile.disasteraware.com" forKey:@"Access-Control-Allow-Origin"];
+        [allHeaders setValue:@"true" forKey:@"Access-Control-Allow-Credentials"];
+
+        NSHTTPURLResponse *updatedResponse = [[NSHTTPURLResponse alloc] initWithURL:[[schemeTask request] URL] statusCode:httpResponse.statusCode HTTPVersion:@"2.0" headerFields:allHeaders];
+        [_delegate urlSchemeHandlerDidReceiveResponse: updatedResponse withData: data forRequest: schemedRequest];
+        [weakSelf completeTask:schemeTask response:updatedResponse data:data error:error];
+    }];
+    [dataTask resume];
+    swRequest.dataTask = dataTask;
+}
+
+- (void) sendRequest:(NSMutableURLRequest *) request forTask: (id <WKURLSchemeTask>) task protocol: (NSString *) protocol {
+//    NSMutableURLRequest *schemedRequest = (NSMutableURLRequest *)[task request];
+    ServiceWorkerResponse* response = [_delegate urlSchemeHandlerWillSendRequest: [task request]];
     if (response != nil) {
+        NSLog(@"Return Cached Response: %@", [[request URL] absoluteString]);
         NSData *data = [response body];
         NSHTTPURLResponse *httpUrlResponse = [[NSHTTPURLResponse alloc] initWithURL:[request URL] statusCode:[[response status] integerValue] HTTPVersion:@"2.0" headerFields:[response headers]];
-        [weakSelf completeTask:task response:httpUrlResponse data:data error:nil];
+        [self completeTask:task response:httpUrlResponse data: data error: nil];
     } else {
-        NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
-            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-            NSMutableDictionary *allHeaders = [NSMutableDictionary dictionaryWithDictionary: [httpResponse allHeaderFields]];
-
-            NSHTTPURLResponse *updatedResponse = [[NSHTTPURLResponse alloc] initWithURL:[[task request] URL] statusCode:httpResponse.statusCode HTTPVersion:@"2.0" headerFields:allHeaders];
-            [_delegate urlSchemeHandlerDidReceiveResponse: updatedResponse withData: data forRequest: schemedRequest];
-            [weakSelf completeTask:task response:updatedResponse data:data error:error];
-        }];
-        [dataTask resume];
+        [self initiateDataTaskForRequest:request urlSchemeTask:task];
     }
 }
  
 - (void) completeTaskWithId: (NSNumber *) taskId response: (NSHTTPURLResponse *) response data: (NSData *) data error: (NSError *) error {
-    id <WKURLSchemeTask> task = [_tasks objectForKey:[taskId stringValue]];
+    ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithId:taskId];
+    id <WKURLSchemeTask> task = [swRequest schemeTask];
     [self completeTask: task response:response data:data error:error];
-    [_tasks removeObjectForKey:[taskId stringValue]];
-    [_requests removeObjectForKey:[taskId stringValue]];
 }
 
 - (void) completeTask: (id <WKURLSchemeTask>) task response: (NSHTTPURLResponse *) response data: (NSData *) data error: (NSError *) error {
-    if (error != nil) {
-        NSLog(@"CDVSWURlSchemeHandler Request Failed with error: %@", [error localizedDescription]);
-        [task didFailWithError:error];
+    NSNumber *requestId = [NSURLProtocol propertyForKey:@"RequestId" inRequest:[task request]];
+    ServiceWorkerRequest *request = [ServiceWorkerRequest requestWithId:requestId];
+    if (request.isClosed) {
+        NSLog(@"Cannot Complete task that is already closed: %@", [[response URL] absoluteString]);
+    } else if (request == nil) {
+        NSLog(@"Cannot Complete task that is NULL: %@", [[response URL] absoluteString]);
     } else {
-        [task didReceiveResponse: response];
-        [task didReceiveData: data];
-        [task didFinish];
+        [ServiceWorkerRequest closeRequestWithId: requestId];
+        if (error != nil) {
+            NSLog(@"CDVSWURLSchemeHandler Request Failed with error: %@", [error localizedDescription]);
+            [task didFailWithError:error];
+        } else {
+            NSLog(@"CDVSWURLSchemeHandler stop task: %@", [[response URL] absoluteString]);
+            [task didReceiveResponse: response];
+            [task didReceiveData: data];
+            [task didFinish];
+        }
     }
 }
 
 - (void)webView:(WKWebView *)webView stopURLSchemeTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
-    NSLog(@"StopURLSchemeTask");
-//    NSString *urlString = [[[urlSchemeTask request] URL] absoluteString];
-//    NSLog(@"Mapped URL: %@", urlString);
+    NSNumber *requestId = [NSURLProtocol propertyForKey:@"RequestId" inRequest:[urlSchemeTask request]];
+    ServiceWorkerRequest *request = [ServiceWorkerRequest requestWithId:requestId];
+    NSURLSessionTask *dataTask = [request dataTask];
+    [ServiceWorkerRequest closeRequestWithId: requestId];
+    if (dataTask) {
+        NSLog(@"stopURLSchemeTask Cancel Data Task - %@", [[[urlSchemeTask request] URL] absoluteString]);
+        [dataTask cancel];
+    } else {
+        NSLog(@"Declare request complete: %@", [[[urlSchemeTask request] URL] absoluteString]);
+    }
 }
 
 

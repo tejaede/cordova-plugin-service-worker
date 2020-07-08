@@ -183,6 +183,9 @@ if (typeof cordova !== 'undefined') {
 
   cacheMatch = function (cacheName, request, options) {
     var handler = makeMatchHandler();
+    if (!(request instanceof Request)) {
+      request = new Request(request);
+    }
     var requestDict = request.toDict();
     exec(handler.resolve, handler.reject, "ServiceWorkerCacheApi", "match", [cacheName, requestDict, options]);
     return handler.promise;
@@ -190,6 +193,9 @@ if (typeof cordova !== 'undefined') {
 
   cacheMatchAll = function (cacheName, request, options, resolve, reject) {
     var handler = makeMatchAllHandler();
+    if (!(request instanceof Request)) {
+      request = new Request(request);
+    }
     var requestDict = request.toDict();
     exec(handler.resolve, handler.reject, "ServiceWorkerCacheApi", "matchAll", [cacheName, requestDict, options]);
     return handler.promise;
