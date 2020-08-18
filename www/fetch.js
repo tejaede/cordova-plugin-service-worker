@@ -76,7 +76,7 @@ if (typeof cordova === "undefined") { // SW-Only
   Request = function (url, options) {
     options = options || {};
     this.url = URL.absoluteURLFromMainClient(url);
-    this.method = options.method || "GET";
+    this.method = options && options.method || "GET";
     this.headers = options.headers instanceof Headers ? options.headers :
       options.headers ? new Headers(options.headers) :
       new Headers({});
@@ -172,13 +172,6 @@ if (typeof cordova === "undefined") { // SW-Only
       headers: headers
     });
   };
-
-  var NativeRequest = Request;
-  Request = function (url, options) {
-    this.url = url;
-    this.options = options;
-  };
-
 
 
   var protocolRegexp = /^^(file|https?)\:\/\//;
@@ -421,17 +414,32 @@ window.fetch = function (requestOrURL, init) {
   var shouldSerializeBody = false,
       isBodyNativeFormData = false,
       url, options;
-
-    isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData;
-
-
+    
     if (requestOrURL instanceof Request) {
         url = requestOrURL.url;
         url = url.replace(/https/, "cordova-main");
         options = requestOrURL;
+        isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData;
+        if (isBodyNativeFormData) {
+          options.headers.delete("content-type");
+          options = {
+              method: options.method,
+              headers: options.headers,
+              body: options.nativeFormData,
+              referrer: options.referrer,
+              referrerPolicy: options.referrerPolicy,
+              mode: options.mode,
+              credentials: options.credentials,
+              cache: options.cache,
+              redirect: options.redirect,
+              integrity: options.integrity,
+              keepalive: options.keepalive,
+              signal: options.signal
+          };
+      }
     } else {
         url = requestOrURL.replace(/https/, "cordova-main");
-        options = init;
+        options = init || {};
     }
     shouldSerializeBody = options.method === "POST" && !isBodyNativeFormData;
     if (shouldSerializeBody) {

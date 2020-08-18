@@ -25,7 +25,6 @@
 
 - (NSURLSession *) session {
     if (_session == nil) {
-//        _session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
         _session = [NSURLSession sharedSession];
     }
     return _session;

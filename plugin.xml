@@ -1,84 +1,86 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
-           id="cordova-plugin-service-worker"
-      version="1.0.1">
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0" id="cordova-plugin-service-worker" version="1.0.1">
     <name>Service Worker</name>
     <description>Service Worker Plugin</description>
     <license>Apache 2.0</license>
     <keywords>cordova,serviceworker,service,worker</keywords>
 
-    <dependency id="es6-promise-plugin" url="https://github.com/vstirbu/PromisesPlugin.git" />
-    <dependency id="cordova-plugin-network-information" />
-    <dependency id="cordova-plugin-wkwebview-engine" />
-
-    <hook type="after_plugin_install" src="scripts/hooks/after-plugin-install.js" />
-    <hook type="after_prepare" src="scripts/hooks/after-plugin-install.js" /> 
-    <hook type="after_build" src="scripts/hooks/after-plugin-build.js" />
-
-    <!-- JS modules for use by the plugin (browser env) -->
-    <js-module src="www/cache.js" name="CacheStorage">
-        <clobbers target="caches" />
-    </js-module>
-    <js-module src="www/fetch.js" name="Fetch">
-        <clobbers target="cordovaFetch" />
-    </js-module>
-    <js-module src="www/service_worker_container.js" name="ServiceWorkerContainer">
-        <clobbers target="navigator.serviceWorker" />
-    </js-module>
-    <js-module src="www/service_worker_registration.js" name="ServiceWorkerRegistration">
-        <clobbers target="ServiceWorkerRegistration" />
-    </js-module>
-    <js-module src="www/service_worker.js" name="ServiceWorker">
-        <clobbers target="ServiceWorker" />
-    </js-module>
-    <js-module src="www/kamino.js" name="kamino.js">
-        <clobbers target="Kamino" />
-    </js-module>
-    <js-module src="www/SyncManager.js" name="SyncManager">
-	    <clobbers target="SyncManager" />
-    </js-module>
-    <js-module src="www/PeriodicSyncManager.js" name="PeriodicSyncManager">
-	    <clobbers target="PeriodicSyncManager" />
-    </js-module>
-    <js-module src="www/SyncRegistration.js" name="SyncRegistration">
-	    <clobbers target="SyncRegistration" />
-    </js-module>
-    <js-module src="www/PeriodicSyncRegistration.js" name="PeriodicSyncRegistration">
-	    <clobbers target="PeriodicSyncRegistration" />
-    </js-module>
-
-    <!-- Assets for use by the worker (worker env) -->
-    <asset src="www/sw_assets/log.js" target="sw_assets/log.js" />
-    <asset src="www/sw_assets/client.js" target="sw_assets/client.js" />
-    <asset src="www/sw_assets/cordova-bridge.js" target="sw_assets/cordova-bridge.js" />
-    <asset src="www/sw_assets/event.js" target="sw_assets/event.js" />
-    
-    <asset src="www/sw_assets/kamino.js" target="sw_assets/kamino.js" />
-    <asset src="www/sw_assets/message.js" target="sw_assets/message.js" />
-    <asset src="www/sw_assets/import-scripts.js" target="sw_assets/import-scripts.js" />
-    <asset src="www/service_worker_container.js" target="sw_assets/service_worker_container.js" />
-    <asset src="www/service_worker_registration.js" target="sw_assets/service_worker_registration.js" />
-    <asset src="www/sw_assets/syncevents.js" target="sw_assets/syncevents.js" />
-
-    <!-- Assets for use by both the worker and main thread -->
-    <asset src="www/fetch.js" target="sw_assets/fetch.js" />
-    <asset src="www/cache.js" target="sw_assets/cache.js" />
-    <asset src="www/SyncManager.js" target="sw_assets/SyncManager.js" />
-    <asset src="www/PeriodicSyncManager.js" target="sw_assets/PeriodicSyncManager.js" />
-    <asset src="www/SyncRegistration.js" target="sw_assets/SyncRegistration.js" />
-    <asset src="www/PeriodicSyncRegistration.js" target="sw_assets/PeriodicSyncRegistration.js" />
-
-    <asset src="www/sw_templates/cordova-callback.js" target="sw_templates/cordova-callback.js" />
-    <asset src="www/sw_templates/create-registration.js" target="sw_templates/create-registration.js" />
-    <asset src="www/sw_templates/define-polyfill-is-ready.js" target="sw_templates/define-polyfill-is-ready.js" />
-    <asset src="www/sw_templates/dispatch-activate-event.js" target="sw_templates/dispatch-activate-event.js" />
-    <asset src="www/sw_templates/dispatch-fetch-event.js" target="sw_templates/dispatch-fetch-event.js" />
-    <asset src="www/sw_templates/dispatch-install-event.js" target="sw_templates/dispatch-install-event.js" />
-    <asset src="www/sw_templates/post-message.js" target="sw_templates/post-message.js" />
-    <asset src="www/sw_templates/resolve-polyfill-is-ready.js" target="sw_templates/resolve-polyfill-is-ready.js" />
-    
-
+    <engines>
+        <engine name="cordova-ios" version="^4.5.5" />
+    </engines>
     <platform name="ios">
+        <dependency id="es6-promise-plugin" url="https://github.com/vstirbu/PromisesPlugin.git" />
+        <dependency id="cordova-plugin-network-information" />
+        <dependency id="cordova-plugin-wkwebview-engine" />
+
+        <hook type="after_plugin_install" src="scripts/hooks/after-plugin-install.js" />
+        <hook type="after_prepare" src="scripts/hooks/after-plugin-install.js" />
+        <hook type="after_build" src="scripts/hooks/after-plugin-build.js" />
+
+        <!-- JS modules for use by the plugin (browser env) -->
+        <js-module src="www/cache.js" name="CacheStorage">
+            <clobbers target="caches" />
+        </js-module>
+        <js-module src="www/fetch.js" name="Fetch">
+            <clobbers target="cordovaFetch" />
+        </js-module>
+        <js-module src="www/service_worker_container.js" name="ServiceWorkerContainer">
+            <clobbers target="navigator.serviceWorker" />
+        </js-module>
+        <js-module src="www/service_worker_registration.js" name="ServiceWorkerRegistration">
+            <clobbers target="ServiceWorkerRegistration" />
+        </js-module>
+        <js-module src="www/service_worker.js" name="ServiceWorker">
+            <clobbers target="ServiceWorker" />
+        </js-module>
+        <js-module src="www/kamino.js" name="kamino.js">
+            <clobbers target="Kamino" />
+        </js-module>
+        <js-module src="www/SyncManager.js" name="SyncManager">
+            <clobbers target="SyncManager" />
+        </js-module>
+        <js-module src="www/PeriodicSyncManager.js" name="PeriodicSyncManager">
+            <clobbers target="PeriodicSyncManager" />
+        </js-module>
+        <js-module src="www/SyncRegistration.js" name="SyncRegistration">
+            <clobbers target="SyncRegistration" />
+        </js-module>
+        <js-module src="www/PeriodicSyncRegistration.js" name="PeriodicSyncRegistration">
+            <clobbers target="PeriodicSyncRegistration" />
+        </js-module>
+
+        <!-- Assets for use by the worker (worker env) -->
+        <asset src="www/sw_assets/log.js" target="sw_assets/log.js" />
+        <asset src="www/sw_assets/client.js" target="sw_assets/client.js" />
+        <asset src="www/sw_assets/cordova-bridge.js" target="sw_assets/cordova-bridge.js" />
+        <asset src="www/sw_assets/event.js" target="sw_assets/event.js" />
+
+        <asset src="www/sw_assets/kamino.js" target="sw_assets/kamino.js" />
+        <asset src="www/sw_assets/message.js" target="sw_assets/message.js" />
+        <asset src="www/sw_assets/import-scripts.js" target="sw_assets/import-scripts.js" />
+        <asset src="www/service_worker_container.js" target="sw_assets/service_worker_container.js" />
+        <asset src="www/service_worker_registration.js" target="sw_assets/service_worker_registration.js" />
+        <asset src="www/sw_assets/syncevents.js" target="sw_assets/syncevents.js" />
+
+        <!-- Assets for use by both the worker and main thread -->
+        <asset src="www/fetch.js" target="sw_assets/fetch.js" />
+        <asset src="www/cache.js" target="sw_assets/cache.js" />
+        <asset src="www/SyncManager.js" target="sw_assets/SyncManager.js" />
+        <asset src="www/PeriodicSyncManager.js" target="sw_assets/PeriodicSyncManager.js" />
+        <asset src="www/SyncRegistration.js" target="sw_assets/SyncRegistration.js" />
+        <asset src="www/PeriodicSyncRegistration.js" target="sw_assets/PeriodicSyncRegistration.js" />
+
+        <asset src="www/sw_templates/cordova-callback.js" target="sw_templates/cordova-callback.js" />
+        <asset src="www/sw_templates/create-registration.js" target="sw_templates/create-registration.js" />
+        <asset src="www/sw_templates/define-polyfill-is-ready.js" target="sw_templates/define-polyfill-is-ready.js" />
+        <asset src="www/sw_templates/dispatch-activate-event.js" target="sw_templates/dispatch-activate-event.js" />
+        <asset src="www/sw_templates/dispatch-fetch-event.js" target="sw_templates/dispatch-fetch-event.js" />
+        <asset src="www/sw_templates/dispatch-install-event.js" target="sw_templates/dispatch-install-event.js" />
+        <asset src="www/sw_templates/post-message.js" target="sw_templates/post-message.js" />
+        <asset src="www/sw_templates/resolve-polyfill-is-ready.js" target="sw_templates/resolve-polyfill-is-ready.js" />
+
+
+
         <config-file target="config.xml" parent="/*">
             <feature name="ServiceWorker">
                 <param name="ios-package" value="CDVServiceWorker" />
@@ -89,20 +91,20 @@
                 <param name="onload" value="true" />
             </feature>
             <feature name="BackgroundSync">
-		        <param name="ios-package" value="CDVBackgroundSync" />
-	        </feature>
+                <param name="ios-package" value="CDVBackgroundSync" />
+            </feature>
             <feature name="CDVSWKWebViewEngine">
-		        <param name="ios-package" value="CDVSWKWebViewEngine" />
-	        </feature>
+                <param name="ios-package" value="CDVSWKWebViewEngine" />
+            </feature>
             <preference name="CordovaWebViewEngine" value="CDVSWWKWebViewEngine" />
         </config-file>
         <config-file target="*-Info.plist" parent="UIBackgroundModes">
             <array>
-            <string>fetch</string>
+                <string>fetch</string>
             </array>
         </config-file>
         <source-file src="src/ios/CDVBackgroundSync.h" />
-	    <source-file src="src/ios/CDVBackgroundSync.m" />
+        <source-file src="src/ios/CDVBackgroundSync.m" />
         <header-file src="src/ios/CDVServiceWorker.h" />
         <source-file src="src/ios/CDVServiceWorker.m" />
         <header-file src="src/ios/CDVSWRequestQueueProtocol.h" />

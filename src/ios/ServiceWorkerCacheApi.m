@@ -310,7 +310,15 @@ static ServiceWorkerCacheApi *sharedInstance;
     [entities addObject:cacheEntity];
     [entities addObject:cacheEntryEntity];
     
-    cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObjects: @"url", @"cache", nil]];
+    
+    if (@available(iOS 13, *)) {
+        // iOS 11 (or newer) ObjC code
+         cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObjects: @"url", @"cache", nil]];
+    } else {
+        cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObject: @"url"]];
+    }
+    
+   
 
     model.entities = entities;
     return model;
