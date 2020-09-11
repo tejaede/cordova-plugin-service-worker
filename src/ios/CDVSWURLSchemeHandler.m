@@ -64,7 +64,6 @@
         NSMutableDictionary *allHeaders = [NSMutableDictionary dictionaryWithDictionary: [httpResponse allHeaderFields]];
         //TODO Pass CORS origin in from outside
         [allHeaders setValue:[NSString stringWithFormat: @"cordova-main://%@", self.allowedOrigin] forKey:@"Access-Control-Allow-Origin"];
-//        [allHeaders setValue:@"cordova-main://mobile.disasteraware.com" forKey:@"Access-Control-Allow-Origin"];
         [allHeaders setValue:@"true" forKey:@"Access-Control-Allow-Credentials"];
 
         NSHTTPURLResponse *updatedResponse = [[NSHTTPURLResponse alloc] initWithURL:[[schemeTask request] URL] statusCode:httpResponse.statusCode HTTPVersion:@"2.0" headerFields:allHeaders];

@@ -1,9 +1,9 @@
 var globalEval = eval;
-var importScriptsRegexp = /importScripts\(['"]([^\"\'\)]*)['"]\)/g;
+
 function parseDependencies(responseText) {
-    var matches = responseText.matchAll(importScriptsRegexp),
+    var importScriptsRegexp = /importScripts\(['"]([^\"\'\)]*)['"]\)/g,
         scripts = [], match;    
-    while ((match = matches.next().value)) {
+    while ((match = importScriptsRegexp.exec(responseText))) {
         scripts.push(match[1]);
     }
     return scripts;

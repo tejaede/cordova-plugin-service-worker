@@ -885,7 +885,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSLog(@"Worker WebView didFinishNavigation - %@", [[webView URL] absoluteString]);
     // Load the Service Worker polyfillse
     [self loadServiceWorkerAssetsIntoContext];
-    
+    mainUrlSchemeHandler.allowedOrigin = [[webView URL] host];
 
     #ifndef DEBUG_JAVASCRIPT
     [self createRegistrationWithExistingScript];
