@@ -889,13 +889,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
     #ifndef DEBUG_JAVASCRIPT
     [self createRegistrationWithExistingScript];
-//    if (serviceWorkerScriptURL != nil) {
-//        NSURL *url = [NSURL URLWithString: serviceWorkerScriptURL];
-//        NSString *relativeURL = [[url pathComponents] lastObject];
-//        NSString *clientURL = [serviceWorkerScriptURL stringByReplacingOccurrencesOfString:relativeURL withString:@""];
-//        NSLog(@"Existing Service Worker Registration URL %@ %@ %@", serviceWorkerScriptURL, relativeURL, clientURL);
-//        [self registerWithURL:relativeURL absoluteURL:serviceWorkerScriptURL andClientURL:clientURL handler:nil];
-//    }
     #endif
 }
 
@@ -941,8 +934,11 @@ NSSet *autoCacheFileNames;
     ServiceWorkerResponse *response;
     #ifdef DEBUG_JAVASCRIPT
      NSURL *baseURL = [[_workerWebView URL] URLByDeletingLastPathComponent];
-     NSString *baseURLbaseURLAsString = [baseURL absoluteString];
-     NSString *relativePath = [[[request URL] absoluteString] stringByReplacingOccurrencesOfString:baseURLbaseURLAsString withString:@""];
+     NSString *baseURLPath = [baseURL path];
+     NSString *relativePath = [[[request URL] path] stringByReplacingOccurrencesOfString:baseURLPath withString:@""];
+    if ([relativePath characterAtIndex: 0] == '/') {
+        relativePath = [relativePath substringFromIndex: 1];
+    }
      NSString *localPath = [NSString stringWithFormat:@"www/sw_assets/%@", relativePath];
      NSString *script = [self readScriptAtRelativePath: localPath];
     if (script == nil) {
@@ -955,7 +951,6 @@ NSSet *autoCacheFileNames;
         return response;
     }
     #endif
-    NSLog(@"urlSchemeHandlerWillSendRequest: %@", [[request URL] absoluteString]);
     if (AUTO_CACHE_ENABLED) {
         response = [[self cacheApi] matchInternal:request];
     }

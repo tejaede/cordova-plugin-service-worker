@@ -409,15 +409,25 @@ Response.prototype.base64EncodedString = function () {
   return this._base64EncodedString;
 };
 
+var baseCorsURL = window.location.protocol + "//" + window.location.host + "/cross-origin?",
+    hostRegexp;
+function prepareURL(url) {
+    hostRegexp = hostRegexp || new RegExp("^(https?|cordova-main)\:\/\/" + window.location.host.replace(/\./g, "\\."));
+    if (hostRegexp.test(url)) {
+        url = url.replace(/https/, "cordova-main");
+    } else {
+        url = baseCorsURL + url;
+    }
+    return url;
+}
 var originalFetch = window.fetch;
+
 window.fetch = function (requestOrURL, init) {
   var shouldSerializeBody = false,
       isBodyNativeFormData = false,
       url, options;
-    
     if (requestOrURL instanceof Request) {
-        url = requestOrURL.url;
-        url = url.replace(/https/, "cordova-main");
+        url = prepareURL(requestOrURL.url);
         options = requestOrURL;
         isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData;
         if (isBodyNativeFormData) {
@@ -438,15 +448,13 @@ window.fetch = function (requestOrURL, init) {
           };
       }
     } else {
-        url = requestOrURL.replace(/https/, "cordova-main");
+        url = prepareURL(requestOrURL.url);
         options = init || {};
     }
     shouldSerializeBody = options.method === "POST" && !isBodyNativeFormData;
     if (shouldSerializeBody) {
       return requestOrURL.arrayBuffer().then(function (arrayBuffer) {
-            console.log("arrayBuffer: ", !!arrayBuffer);
             var text = arrayBufferToBase64String(arrayBuffer);
-            console.log("processText: ", url, text);
             options = {
                 method: options.method,
                 headers: options.headers,
@@ -471,9 +479,11 @@ window.fetch = function (requestOrURL, init) {
 (function() {
   var proxied = window.XMLHttpRequest.prototype.open;
   window.XMLHttpRequest.prototype.open = function() {
-      var url = arguments[1];
-      url = url && url.replace(/https/, "cordova-main");
-      return proxied.apply(this, [].slice.call(arguments));
+      var url = arguments[1],
+        args = [].slice.call(arguments);
+      if (url) {
+        args[1] = prepareURL(url);
+      }
+      return proxied.apply(this, args);
   };
 })();
-

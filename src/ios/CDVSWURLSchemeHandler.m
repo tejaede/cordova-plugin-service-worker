@@ -75,8 +75,10 @@
 }
 
 - (void) sendRequest:(NSMutableURLRequest *) request forTask: (id <WKURLSchemeTask>) task protocol: (NSString *) protocol {
-//    NSMutableURLRequest *schemedRequest = (NSMutableURLRequest *)[task request];
-    ServiceWorkerResponse* response = [_delegate urlSchemeHandlerWillSendRequest: [task request]];
+    if ([[[request URL] lastPathComponent] isEqualToString:@"cross-origin"]) {
+        [request setURL: [NSURL URLWithString:[[request URL] query]]];
+    }
+    ServiceWorkerResponse* response = [_delegate urlSchemeHandlerWillSendRequest: request];
     if (response != nil) {
         NSLog(@"Return Cached Response: %@", [[request URL] absoluteString]);
         NSData *data = [response body];
