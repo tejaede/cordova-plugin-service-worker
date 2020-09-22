@@ -129,6 +129,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     WKWebView *mainWebView = (WKWebView *)[[self webViewEngine] engineWebView];
     mainUrlSchemeHandler = [[mainWebView configuration] urlSchemeHandlerForURLScheme: _swUrlScheme];
     mainUrlSchemeHandler.queueHandler = self;
+    mainUrlSchemeHandler.delegate = self;
     mainUrlSchemeHandler.scheme = _swUrlScheme;
     
 
@@ -379,6 +380,18 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     [mainUrlSchemeHandler completeTaskWithId: requestId response: urlResponse data: data error:nil];
 }
 
+-(BOOL) isURLAPrecachedJavascriptFile: (NSURL *) url {
+    NSArray *components = [url pathComponents];
+    BOOL isDependency = [components containsObject: @"packages"];
+    return isDependency && [[url pathExtension] isEqualToString:@"js"];
+}
+
+-(BOOL) isURLJavascriptDependency: (NSURL *) url {
+    NSArray *components = [url pathComponents];
+    BOOL isDependency = [components containsObject: @"node_modules"];
+    return isDependency && [[url pathExtension] isEqualToString:@"js"];
+}
+
 - (void)handleTrueFetchScriptMessage: (WKScriptMessage *) message
 {
     NSDictionary *body = [message body];
@@ -400,11 +413,14 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
         return;
     }
     BOOL isImportScriptRequest = [request valueForHTTPHeaderField:@"x-import-scripts"] != nil;
-    BOOL isScriptOnFileSystem = [[url pathComponents] containsObject: @"packages"] && [[url pathExtension] isEqualToString:@".js"];
+    BOOL isScriptOnFileSystem = [self isURLAPrecachedJavascriptFile:url];
+    BOOL isJavascriptDependency = [self isURLJavascriptDependency:url];
     // Specific to Contour Use Case
     if (isScriptOnFileSystem && AUTO_CACHE_ENABLED) {
         response = [self loadURLFromFileSystem: url];
     } else if (isImportScriptRequest && AUTO_CACHE_ENABLED) {
+        response = [[self cacheApi] matchInternal:request];
+    } else if (isJavascriptDependency && AUTO_CACHE_ENABLED) {
         response = [[self cacheApi] matchInternal:request];
     }
 
@@ -413,7 +429,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
         NSDictionary *responseDict = [response toDictionary];
         [self sendResultToWorker:messageId parameters: responseDict];
     } else {
-        NSLog(@"Send True Fetch %@", url);
+//        NSLog(@"Send True Fetch %@", url);
         NSURLSession *session = [NSURLSession sharedSession];
         NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
@@ -422,7 +438,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
                 NSLog(@"True Fetch Failed: %@", [error localizedDescription]);
                 [self sendResultToWorker:messageId parameters: nil withError: error];
             } else {
-                if (isImportScriptRequest) {
+                if (isImportScriptRequest || isJavascriptDependency) {
                     NSLog(@"Cache Import Scripts: %@", url);
                     [[self cacheApi] putInternal:request swResponse:swResponse];
                 }
@@ -444,7 +460,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     if ([fileManager fileExistsAtPath:fsString]) {
         content = [NSData dataWithContentsOfFile:fsString];
         if (content != nil) {
-            response = [[ServiceWorkerResponse alloc] initWithUrl:url body:content status:@200 headers:[[NSDictionary alloc] init]];
+            response = [[ServiceWorkerResponse alloc] initWithUrl:[url absoluteString] body:content status:@200 headers:[[NSDictionary alloc] init]];
         }
     }
     return response;
@@ -771,15 +787,14 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
     // Compose the absolute path.
     NSString *absolutePath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:[NSString stringWithFormat:@"/%@", relativePath]];
-
-    // Read the script from the file.
-    NSError *error;
-    NSString *script = [NSString stringWithContentsOfFile:absolutePath encoding:NSUTF8StringEncoding error:&error];
-
-    // If there was an error, log it and return.
-    if (error) {
-        NSLog(@"Could not read script: %@", [error description]);
-        return nil;
+    NSString *script;
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    if ([fileManager fileExistsAtPath: absolutePath]) {
+        NSError *error;
+        script = [NSString stringWithContentsOfFile:absolutePath encoding:NSUTF8StringEncoding error:&error];
+        if (error) {
+            NSLog(@"Could not read script: %@", [error description]);
+        }
     }
 
     // Return our script!
@@ -840,7 +855,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSString *relativePath;
     NSString *script;
     [self evaluateScript:[definePolyfillIsReadyTemplate content] inWebView: self.workerWebView callback: nil];
-    NSLog(@"definePolyfillIsReadyTemplate: %@", [definePolyfillIsReadyTemplate content]);
     
     for (fileName in baseScripts) {
         NSLog(@"load base sw asset: %@", fileName);
@@ -922,7 +936,7 @@ NSSet *autoCacheFileNames;
 }
 
 - (void)urlSchemeHandlerDidReceiveResponse: (NSHTTPURLResponse *) response withData: (NSData *) data forRequest: (NSURLRequest *) request {
-    NSLog(@"ServiceWorker.urlSchemeHandlerDidReceiveResponse: %@ %@", [[request URL] absoluteString], [[response URL] absoluteString]);
+//    NSLog(@"ServiceWorker.urlSchemeHandlerDidReceiveResponse: %@ %@", [[request URL] absoluteString], [[response URL] absoluteString]);
     
     // worker bootstrap.js, index.native.html, and alt-host.json are specific to contour
     if (([response statusCode] == 200) && [self shouldAutoCacheRequest:request]) {
@@ -931,6 +945,7 @@ NSSet *autoCacheFileNames;
 }
 
 - (ServiceWorkerResponse *)urlSchemeHandlerWillSendRequest: (NSURLRequest *) request {
+    NSLog(@"urlSchemeHandlerWillSendRequest: %@", [[request URL] absoluteString]);
     ServiceWorkerResponse *response;
     #ifdef DEBUG_JAVASCRIPT
      NSURL *baseURL = [[_workerWebView URL] URLByDeletingLastPathComponent];
@@ -953,6 +968,7 @@ NSSet *autoCacheFileNames;
     #endif
     if (AUTO_CACHE_ENABLED) {
         response = [[self cacheApi] matchInternal:request];
+        NSLog(@"Response Found For Request: %@ %@", response == nil ? @"NO" : @"YES", [[request URL] absoluteString]);
     }
     return response;
 }
