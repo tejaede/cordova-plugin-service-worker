@@ -39,8 +39,8 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
     NSNumber *requestId = [NSNumber numberWithLongLong:atomic_fetch_add_explicit(&requestCount, 1, memory_order_relaxed)];
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest new];
     swRequest.requestId = requestId;
-    swRequest.schemedRequest = (NSMutableURLRequest *)[schemeTask request];
-    [NSURLProtocol setProperty:requestId forKey:@"RequestId" inRequest:(NSMutableURLRequest *)swRequest.schemedRequest];
+    swRequest.originalRequest = (NSMutableURLRequest *)[schemeTask request];
+    [NSURLProtocol setProperty:requestId forKey:@"RequestId" inRequest:(NSMutableURLRequest *)swRequest.originalRequest];
     swRequest.schemeTask = schemeTask;
     [[ServiceWorkerRequest requestsById] setObject:swRequest forKey: requestId];
     return swRequest;
@@ -50,7 +50,7 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
 //    NSNumber *requestId = [NSNumber numberWithLongLong:atomic_fetch_add_explicit(&requestCount, 1, memory_order_relaxed)];
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest new];
 //    swRequest.requestId = requestId;
-    swRequest.schemedRequestDict = requestDict;
+    swRequest.originalRequestDict = requestDict;
 //    [[ServiceWorkerRequest requestsById] setValue:swRequest forKey: [requestId stringValue]];
     return swRequest;
 }
@@ -76,80 +76,117 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
     [[ServiceWorkerRequest requestsById] removeObjectForKey: requestId];
 }
 
-
+@synthesize originalRequest = _originalRequest;
 @synthesize outgoingRequest = _outgoingRequest;
 @synthesize schemedRequest = _schemedRequest;
-@synthesize schemedRequestDict = _schemedRequestDict;
+@synthesize originalRequestDict = _originalRequestDict;
 @synthesize requestId = _requestId;
 @synthesize schemeTask = _schemeTask;
 @synthesize dataTask = _dataTask;
 
 - (NSMutableURLRequest *) outgoingRequest {
     NSString *scheme;
+    NSURL *schemedURL;
+    
     NSString *outgoingURLString;
-    if (_outgoingRequest == nil && self.schemedRequest != nil) {
-        
-        scheme = [[[self schemedRequest] URL] scheme];
-        if (![scheme isEqualToString:@"https"]) {
-            outgoingURLString = [[[[self schemedRequest] URL] absoluteString] stringByReplacingOccurrencesOfString: scheme withString: @"https"];
-        }
-        NSURLRequest *request = [_schemedRequest mutableCopy];
-        NSLog(@"url: %@", [request URL]);
-        _outgoingRequest = [_schemedRequest mutableCopy];
-        if ([[_outgoingRequest HTTPMethod] isEqualToString: @"POST"]) {
-            NSString * contentType = [_outgoingRequest valueForHTTPHeaderField:@"content-type"];
-            if (![contentType containsString:@"multipart/form-data"]) {
-                NSData *body = [_schemedRequest HTTPBody];
-                NSData *decodedBody = [[NSData alloc] initWithBase64EncodedData:body options:NSDataBase64DecodingIgnoreUnknownCharacters];
-                [_outgoingRequest setHTTPBody:decodedBody];
+    if (_outgoingRequest == nil) {
+        NSMutableURLRequest *schemedRequest = [self schemedRequest];
+        if (schemedRequest != nil) {
+            _outgoingRequest = [schemedRequest mutableCopy];
+            schemedURL = [_outgoingRequest URL];
+            scheme = [schemedURL scheme];
+            NSURL *outgoingURL;
+            if (scheme == nil) {
+                NSLog(@"Test");
+                return nil;
             }
-        }
-        [_outgoingRequest setURL:[NSURL URLWithString:outgoingURLString]];
-        [_outgoingRequest setCachePolicy:NSURLRequestReloadIgnoringLocalCacheData];
-        if (self.requestId != nil) {
-            [NSURLProtocol setProperty:[self requestId] forKey:@"RequestId" inRequest:_outgoingRequest];
-        }
-    } else if (_outgoingRequest == nil && self.schemedRequestDict != nil) {
-        NSURL *url = [NSURL URLWithString:[_schemedRequestDict valueForKey:@"url"]];
-        NSDictionary *headers = [self getHeadersForTrueFetchScriptMessage:_schemedRequestDict];
-        scheme = [url scheme];
-        if (![scheme isEqualToString:@"https"]) {
-            outgoingURLString = [[url absoluteString] stringByReplacingOccurrencesOfString: scheme withString: @"https"];
-        }
-        JSValue *body = [_schemedRequestDict valueForKey:@"body"];
-        NSString *method = [_schemedRequestDict valueForKey:@"method"];
-        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: outgoingURLString]];
-        [request setTimeoutInterval:60];
-        NSString *contentType = [headers valueForKey:@"content-type"];
-        NSString *boundary;
-        NSData *httpBody;
-        if ([body isKindOfClass:[NSDictionary class]]) {
-            boundary = [self generateBoundaryString];
-            if (contentType == nil) {
-                contentType = [NSString stringWithFormat: @"multipart/form-data; boundary=%@", boundary];
+            if (![scheme isEqualToString:@"https"]) {
+                outgoingURLString = [[schemedURL absoluteString] stringByReplacingOccurrencesOfString: scheme withString: @"https"];
+                outgoingURL = [NSURL URLWithString:outgoingURLString];
             } else {
-                contentType = [NSString stringWithFormat: @"%@; boundary=%@;", contentType, boundary];
+                outgoingURL= schemedURL;
             }
-            httpBody = [self makeTrueFetchHTTPRequestMultipartBody: (NSDictionary *) body boundary: boundary];
-            [headers setValue:contentType forKey:@"content-type"];
-        }
-        
-        [request setHTTPMethod:method];
-        if (headers != nil) {
-            for (NSString* key in headers) {
-                id value = headers[key];
-                if([value isKindOfClass:[NSArray class]]){
-                    value = [value objectAtIndex:0];
+            [_outgoingRequest setURL:outgoingURL];
+            if ([[_outgoingRequest HTTPMethod] isEqualToString: @"POST"]) {
+                NSString * contentType = [_outgoingRequest valueForHTTPHeaderField:@"content-type"];
+                if (![contentType containsString:@"multipart/form-data"]) {
+                    NSData *body = [_schemedRequest HTTPBody];
+                    NSData *decodedBody = [[NSData alloc] initWithBase64EncodedData:body options:NSDataBase64DecodingIgnoreUnknownCharacters];
+                    [_outgoingRequest setHTTPBody:decodedBody];
                 }
-                [request setValue: value forHTTPHeaderField:key];
             }
-        };
-        if (httpBody != nil) {
-            [request setHTTPBody: httpBody];
+            [_outgoingRequest setCachePolicy:NSURLRequestReloadIgnoringLocalCacheData];
+            if (self.requestId != nil) {
+                [NSURLProtocol setProperty:[self requestId] forKey:@"RequestId" inRequest:_outgoingRequest];
+            }
+        } else {
+            NSLog(@"ServiceWorkerRequest cannot create an outgoing request without a schemed request");
         }
-        _outgoingRequest = request;
     }
     return _outgoingRequest;
+}
+
+
+- (NSMutableURLRequest *) schemedRequest {
+    NSURL *schemedURL;
+    if (_schemedRequest == nil && _originalRequest != nil) {
+        _schemedRequest = [_originalRequest mutableCopy];
+        schemedURL = [_originalRequest URL];
+        schemedURL = [self normalizeURL: schemedURL];
+        [_schemedRequest setURL: schemedURL];
+    } else if (_schemedRequest == nil && _originalRequestDict != nil) {
+        _schemedRequest = [self requestForRequestDict: _originalRequestDict];
+    } else if (_schemedRequest == nil) {
+        NSLog(@"ServiceWorkerRequest cannot create schemedRequest without original request or original request dict");
+    }
+    return _schemedRequest;
+}
+
+- (NSURL *) normalizeURL: (NSURL *) url {
+    if ([[url lastPathComponent] isEqualToString:@"cross-origin"]) {
+        url = [NSURL URLWithString:[url query]];
+    }
+    return url;
+}
+
+- (NSMutableURLRequest *) requestForRequestDict: (NSDictionary *) requestDict {
+    NSURL *url = [NSURL URLWithString:[_originalRequestDict valueForKey:@"url"]];
+    NSDictionary *headers = [self getHeadersForTrueFetchScriptMessage:_originalRequestDict];
+    JSValue *body = [_originalRequestDict valueForKey:@"body"];
+    NSString *method = [_originalRequestDict valueForKey:@"method"];
+    
+    url = [NSURL URLWithString:[_originalRequestDict valueForKey:@"url"]];
+    url = [self normalizeURL:url];
+    
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setTimeoutInterval:60];
+    NSString *contentType = [headers valueForKey:@"content-type"];
+    NSString *boundary;
+    NSData *httpBody;
+    if ([body isKindOfClass:[NSDictionary class]]) {
+        boundary = [self generateBoundaryString];
+        if (contentType == nil) {
+            contentType = [NSString stringWithFormat: @"multipart/form-data; boundary=%@", boundary];
+        } else {
+            contentType = [NSString stringWithFormat: @"%@; boundary=%@;", contentType, boundary];
+        }
+        httpBody = [self makeTrueFetchHTTPRequestMultipartBody: (NSDictionary *) body boundary: boundary];
+        [headers setValue:contentType forKey:@"content-type"];
+    }
+    [request setHTTPMethod:method];
+    if (headers != nil) {
+        for (NSString* key in headers) {
+            id value = headers[key];
+            if([value isKindOfClass:[NSArray class]]){
+                value = [value objectAtIndex:0];
+            }
+            [request setValue: value forHTTPHeaderField:key];
+        }
+    };
+    if (httpBody != nil) {
+        [request setHTTPBody: httpBody];
+    }
+    return request;
 }
 
 - (NSDictionary *) getHeadersForTrueFetchScriptMessage: (NSDictionary *) messageBody {

@@ -22,6 +22,7 @@
 
 @implementation ServiceWorkerResponse
 
+//TODO Convert URL to NSURL
 @synthesize url = _url;
 @synthesize body = _body;
 @synthesize status = _status;
@@ -62,7 +63,7 @@
 
 + (ServiceWorkerResponse *)responseFromDictionary:(NSDictionary *)dictionary
 {
-    NSString *url = dictionary[@"url"];
+    NSString *url = (NSString *)dictionary[@"url"];
     NSData *body = dictionary[@"body"];
     NSNumber *status = dictionary[@"status"];
     NSDictionary *headers = dictionary[@"headers"];
@@ -76,17 +77,20 @@
         return nil;
     } else {
         NSString *encodedBody;
-        NSNumber *isEncoded = [NSNumber numberWithInt:![self.url hasSuffix:@".js"]];
-        if ([isEncoded isEqualToNumber:@0]) {
+        NSURL *aUrl = [NSURL URLWithString:[self url]];
+        BOOL isPlainText = [[aUrl pathExtension] isEqualToString:@"js"];
+        if (isPlainText) {
             encodedBody = [[NSString alloc] initWithData:self.body encoding:NSUTF8StringEncoding];
         }
         if (encodedBody == nil) {
             encodedBody = [self.body base64EncodedStringWithOptions: 0];
+            isPlainText = false;
         }
         if (encodedBody == nil) {
             encodedBody = @"No response";
         }
-        return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new], [isEncoded stringValue]] forKeys:@[@"url", @"body", @"status", @"headers", @"isEncoded"]];
+        NSString *isEncoded = isPlainText ? @"0" : @"1";
+        return [NSDictionary dictionaryWithObjects:@[self.url, encodedBody, self.status, self.headers ? self.headers : [NSDictionary new], isEncoded] forKeys:@[@"url", @"body", @"status", @"headers", @"isEncoded"]];
     }
 }
 

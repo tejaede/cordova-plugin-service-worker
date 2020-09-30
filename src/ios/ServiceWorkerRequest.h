@@ -30,9 +30,10 @@
 
 @property (class, readonly) NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * requestsById;
 
-@property (nonatomic, strong) NSURLRequest *schemedRequest;
-@property (nonatomic, retain) NSDictionary *schemedRequestDict;
+@property (nonatomic, strong) NSURLRequest *originalRequest;
+@property (nonatomic, retain) NSDictionary *originalRequestDict;
 @property (nonatomic, strong) NSMutableURLRequest *outgoingRequest;
+@property (nonatomic, strong) NSMutableURLRequest *schemedRequest;
 @property (nonatomic, strong) NSNumber *requestId;
 @property (nonatomic, retain) id <WKURLSchemeTask> schemeTask;
 
