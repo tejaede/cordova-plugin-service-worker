@@ -46,7 +46,6 @@
 
 -(NSArray *)entriesMatchingRequestByURL:(NSURL *)url includesQuery:(BOOL)includesQuery inContext:(NSManagedObjectContext *)moc
 {
-    ServiceWorkerCacheEntry *entry;
     NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
 
     NSEntityDescription *entity = [NSEntityDescription
@@ -55,15 +54,32 @@
 
     NSPredicate *predicate;
     
-    if (includesQuery) {
-        predicate = [NSPredicate predicateWithFormat:@"(cache == %@) AND (url == %@) AND (query == %@)", self, [self urlWithoutQueryForUrl:url], url.query];
+    if (@available(iOS 13, *)) {
+        if (includesQuery) {
+            predicate = [NSPredicate predicateWithFormat:@"(cache == %@) AND (url == %@) AND (query == %@)", self, [self urlWithoutQueryForUrl:url], url.query];
+        } else {
+            predicate = [NSPredicate predicateWithFormat:@"(cache == %@) AND (url == %@)", self, [self urlWithoutQueryForUrl:url]];
+        }
     } else {
-        predicate = [NSPredicate predicateWithFormat:@"(cache == %@) AND (url == %@)", self, [self urlWithoutQueryForUrl:url]];
+        if (includesQuery) {
+            predicate = [NSPredicate predicateWithFormat:@"(cacheName == %@) AND (url == %@) AND (query == %@)", [self name], [self urlWithoutQueryForUrl:url], url.query];
+        } else {
+            predicate = [NSPredicate predicateWithFormat:@"(cacheName == %@) AND (url == %@)", [self name], [self urlWithoutQueryForUrl:url]];
+        }
     }
+    
+    
     [fetchRequest setPredicate:predicate];
-
+    BOOL isMainThread = [NSThread isMainThread];
     NSError *error;
     NSArray *entries = [moc executeFetchRequest:fetchRequest error:&error];
+    
+    if (error != nil) {
+        NSLog(@"Failed to fetch entries for url %@ (%@) %@", isMainThread ? @"YES" : @"NO", [self name], url, [error localizedDescription]);
+//        NSLog(@"Failed to put request in cache (%@): %@ \n %@ \n %@ \n %@", self.name, [entry url], foundEntry ? @"YES" : @"NO", [err localizedDescription], [err description]);
+    }
+
+    
     
     // TODO: check error on entries == nil
     return entries;
@@ -136,26 +152,41 @@
 
 -(void)putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *)response inContext:(NSManagedObjectContext *)moc error: (NSError * _Nullable *)error
 {
-    
+    [moc performBlockAndWait:^{
     NSArray *entries  = [self entriesMatchingRequestByURL: request.URL includesQuery:NO inContext:moc];
     ServiceWorkerCacheEntry *entry;
+    BOOL foundEntry;
     if (entries != nil && [entries count] >= 1) {
         entry = [entries objectAtIndex:0];
-        NSLog(@"Cache.putRequest: overwrite existing entry %@", [request.URL absoluteString]);
+        foundEntry = true;
+//        NSLog(@"Cache.putRequest: overwrite existing entry %@", [request.URL absoluteString]);
     } else {
-        NSLog(@"Cache.putRequest: insert new entry %@", [request.URL absoluteString]);
+//        NSLog(@"Cache.putRequest: insert new entry %@", [request.URL absoluteString]);
         entry = (ServiceWorkerCacheEntry *)[NSEntityDescription insertNewObjectForEntityForName:@"CacheEntry" inManagedObjectContext:moc];
+        foundEntry = false;
     }
     entry.url = [self urlWithoutQueryForUrl:request.URL];
     entry.query = request.URL.query;
     entry.request = [NSKeyedArchiver archivedDataWithRootObject:request];
     entry.response = [NSKeyedArchiver archivedDataWithRootObject:response];
     entry.cache = self;
+//    if (!(@available(iOS 13, *))) {
+        entry.cacheName = self.name;
+//    }
+    BOOL isMainThread = [NSThread isMainThread];
     NSError *err;
-    [moc save:&err];
-    if (err != nil) {
-        NSLog(@"Failed to put request in cache: %@", [err description]);
-    }
+    
+            NSError *error = nil;
+            if (![moc save:&error]) {
+                NSLog(@"Failed to put request in cache (%@): %@ \n %@ \n %@ \n %@ \n %@ \n %@", entry.cacheName, self.name, [entry url], foundEntry ? @"YES" : @"NO", [error localizedDescription], [error description], [error localizedFailureReason]);
+                abort();
+            }
+        }];
+//    [moc save:&err];
+//    if (err != nil) {
+//        NSLog(@"Failed to put request in cache (%@): %@ %@ \n %@ \n %@ \n %@", isMainThread ? @"Main: YES" : @"Main: NO", self.name, [entry url],  foundEntry ? @"Found: YES" : @"Found: NO", [err localizedDescription], [err description]);
+//        BOOL tmp = false;
+//    }
 }
 
 -(bool)deleteRequest:(NSURLRequest *)request fromContext:(NSManagedObjectContext *)moc

@@ -29,5 +29,6 @@
 @property (nonatomic, retain) NSData * response;
 @property (nonatomic, retain) NSString * url;
 @property (nonatomic, retain) ServiceWorkerCache *cache;
+@property (nonatomic, retain) NSString * cacheName;
 
 @end

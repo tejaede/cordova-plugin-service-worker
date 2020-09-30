@@ -27,5 +27,6 @@
 @dynamic response;
 @dynamic url;
 @dynamic cache;
+@dynamic cacheName;
 
 @end

@@ -291,6 +291,7 @@ static ServiceWorkerCacheApi *sharedInstance;
     NSRelationshipDescription *cacheRelationship = [[NSRelationshipDescription alloc] init];
     cacheRelationship.name = @"cache";
     cacheRelationship.destinationEntity = cacheEntity;
+//    cacheRelationship.optional = NO;
     cacheRelationship.minCount = 0;
     cacheRelationship.maxCount = 1;
     cacheRelationship.deleteRule = NSNullifyDeleteRule;
@@ -300,26 +301,30 @@ static ServiceWorkerCacheApi *sharedInstance;
 
     entriesRelationship.inverseRelationship = cacheRelationship;
     [cacheProperties addObject:entriesRelationship];
+    
+    NSAttributeDescription *cacheNameAttribute = [[NSAttributeDescription alloc] init];
+    cacheNameAttribute.name = @"cacheName";
+    cacheNameAttribute.attributeType = NSStringAttributeType;
+    cacheNameAttribute.optional = NO;
+    cacheNameAttribute.indexed = YES;
+    [cacheEntryProperties addObject:cacheNameAttribute];
 
+    NSArray *cacheEntryUniquenessConstraints;
+    if (@available(iOS 13, *)) {
+        cacheEntryUniquenessConstraints = [NSArray arrayWithObject:[NSArray arrayWithObjects: @"url", @"cache", nil]];
+    } else {
+
+        cacheEntryUniquenessConstraints = [NSArray arrayWithObject:[NSArray arrayWithObjects: @"url", @"cacheName", nil]];
+    }
+    
     cacheEntity.properties = cacheProperties;
     cacheEntryEntity.properties = cacheEntryProperties;
     
-//    cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObject: @"url"]];
-
-
     [entities addObject:cacheEntity];
     [entities addObject:cacheEntryEntity];
     
+//    cacheEntryEntity.uniquenessConstraints = cacheEntryUniquenessConstraints;
     
-    if (@available(iOS 13, *)) {
-        // iOS 11 (or newer) ObjC code
-         cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObjects: @"url", @"cache", nil]];
-    } else {
-        cacheEntryEntity.uniquenessConstraints =  [NSArray arrayWithObject:[NSArray arrayWithObject: @"url"]];
-    }
-    
-   
-
     model.entities = entities;
     return model;
 }
@@ -529,16 +534,16 @@ static ServiceWorkerCacheApi *sharedInstance;
     NSURLRequest *urlRequest = [self nativeRequestForScriptMessageParameter: request];
     
     
-
+    NSLog(@"handleCacheMatchScriptMessage: %@", [[urlRequest URL] absoluteString]);
 
     // Check for a match in the cache.
     // TODO: Deal with multiple matches.
     ServiceWorkerResponse *cachedResponse;
-//    if (cacheName == nil) {
-//        cachedResponse = [cacheStorage matchForRequest:urlRequest];
-//    } else {
-//        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
-//    }
+    if (cacheName == nil) {
+        cachedResponse = [cacheStorage matchForRequest:urlRequest];
+    } else {
+        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
+    }
 
     if (cachedResponse == nil) {
         NSString *urlString = [[urlRequest URL] absoluteString];
@@ -565,11 +570,14 @@ static ServiceWorkerCacheApi *sharedInstance;
         }
     }
     
+    NSLog(@"Cache %@: %@", cachedResponse == nil ? @"MISS" : @"HIT", [[urlRequest URL] absoluteString]);
     if (cachedResponse != nil) {
+        
         // Convert the response to a dictionary and send it to the promise resolver.
         NSDictionary *responseDictionary = [cachedResponse toDictionary];
         [self sendResultToWorker: messageId parameters: responseDictionary];
     } else {
+
         [self sendResultToWorker: messageId parameters: nil];
     }
 }
@@ -795,8 +803,6 @@ NSString *internalCacheName = @"__cordova_sw_internal__";
     } else {
         cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
     }
-
-    NSLog(@"Main - Match: %@ %d", [[urlRequest URL] path], cachedResponse != nil);
     
     CDVPluginResult *result;
     if (cachedResponse != nil) {
