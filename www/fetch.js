@@ -97,15 +97,15 @@ if (typeof cordova === "undefined") { // SW-Only
     });
   };
 
-  var _arrayBufferToBase64 = function( buffer ) {
+  var _arrayBufferToBase64 = function (buffer) {
     var binary = '';
-    var bytes = new Uint8Array( buffer );
+    var bytes = new Uint8Array(buffer);
     var len = bytes.byteLength;
     for (var i = 0; i < len; i++) {
-        binary += String.fromCharCode( bytes[ i ] );
+      binary += String.fromCharCode(bytes[i]);
     }
-    return window.btoa( binary );
-};
+    return window.btoa(binary);
+  };
 
 
   var mapFormDataForKey = function (formData, rawForm, key) {
@@ -128,9 +128,9 @@ if (typeof cordova === "undefined") { // SW-Only
   var serializeFormData = function (formData) {
     // Setup our serialized data
     var keys = formData.keys(),
-        promises = [],
-        serialized = null,
-        key;
+      promises = [],
+      serialized = null,
+      key;
 
     while ((key = keys.next().value)) {
       serialized = serialized || {};
@@ -388,8 +388,6 @@ Response.prototype.toDict = function () {
   });
 };
 
-
-
 function arrayBufferToBase64String(arrayBuffer) {
   var array = new Uint8Array(arrayBuffer),
     string = "",
@@ -409,81 +407,83 @@ Response.prototype.base64EncodedString = function () {
   return this._base64EncodedString;
 };
 
-var baseCorsURL = window.location.protocol + "//" + window.location.host + "/cross-origin?",
+
+  var baseCorsURL = window.location.protocol + "//" + window.location.host + "/cross-origin?",
+    protocolRegexp,
     hostRegexp;
-function prepareURL(url) {
+  function prepareURL(url) {
     hostRegexp = hostRegexp || new RegExp("^(https?|cordova-main)\:\/\/" + window.location.host.replace(/\./g, "\\."));
-    if (hostRegexp.test(url)) {
-        url = url.replace(/https/, "cordova-main");
-    } else {
-        url = baseCorsURL + url;
+    protocolRegexp = protocolRegexp || /(https?|cordova-main):\/\//;
+     if (hostRegexp.test(url)) {
+      url = url.replace(/https/, "cordova-main");
+    } else if (protocolRegexp.test(url)) {
+      url = baseCorsURL + url;
     }
     return url;
-}
-var originalFetch = window.fetch;
-
-window.fetch = function (requestOrURL, init) {
-  var shouldSerializeBody = false,
+  }
+  var originalFetch = window.fetch;
+  window.fetch = function (requestOrURL, init) {
+    var shouldSerializeBody = false,
       isBodyNativeFormData = false,
       url, options;
     if (requestOrURL instanceof Request) {
-        url = prepareURL(requestOrURL.url);
-        options = requestOrURL;
-        isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData;
-        if (isBodyNativeFormData) {
-          options.headers.delete("content-type");
-          options = {
-              method: options.method,
-              headers: options.headers,
-              body: options.nativeFormData,
-              referrer: options.referrer,
-              referrerPolicy: options.referrerPolicy,
-              mode: options.mode,
-              credentials: options.credentials,
-              cache: options.cache,
-              redirect: options.redirect,
-              integrity: options.integrity,
-              keepalive: options.keepalive,
-              signal: options.signal
-          };
+      url = prepareURL(requestOrURL.url);
+      options = requestOrURL;
+      isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData;
+      if (isBodyNativeFormData) {
+        options.headers.delete("content-type");
+        options = {
+          method: options.method,
+          headers: options.headers,
+          body: options.nativeFormData,
+          referrer: options.referrer,
+          referrerPolicy: options.referrerPolicy,
+          mode: options.mode,
+          credentials: options.credentials,
+          cache: options.cache,
+          redirect: options.redirect,
+          integrity: options.integrity,
+          keepalive: options.keepalive,
+          signal: options.signal
+        };
       }
     } else {
-        url = prepareURL(requestOrURL.url);
-        options = init || {};
+      url = prepareURL(requestOrURL);
+      options = init || {};
     }
     shouldSerializeBody = options.method === "POST" && !isBodyNativeFormData;
     if (shouldSerializeBody) {
       return requestOrURL.arrayBuffer().then(function (arrayBuffer) {
-            var text = arrayBufferToBase64String(arrayBuffer);
-            options = {
-                method: options.method,
-                headers: options.headers,
-                body: text,
-                referrer: options.referrer,
-                referrerPolicy: options.referrerPolicy,
-                mode: options.mode,
-                credentials: options.credentials,
-                cache: options.cache,
-                redirect: options.redirect,
-                integrity: options.integrity,
-                keepalive: options.keepalive,
-                signal: options.signal
-            };
-            return originalFetch.call(window, url, options);
-        });
+        var text = arrayBufferToBase64String(arrayBuffer);
+        options = {
+          method: options.method,
+          headers: options.headers,
+          body: text,
+          referrer: options.referrer,
+          referrerPolicy: options.referrerPolicy,
+          mode: options.mode,
+          credentials: options.credentials,
+          cache: options.cache,
+          redirect: options.redirect,
+          integrity: options.integrity,
+          keepalive: options.keepalive,
+          signal: options.signal
+        };
+        return originalFetch.call(window, url, options);
+      });
     } else {
       return originalFetch.call(window, new Request(url, options));
     }
-};
+  };
 
-(function() {
-  var proxied = window.XMLHttpRequest.prototype.open;
-  window.XMLHttpRequest.prototype.open = function() {
+  (function () {
+    var proxied = window.XMLHttpRequest.prototype.open;
+    window.XMLHttpRequest.prototype.open = function () {
       var url = arguments[1],
         args = [].slice.call(arguments);
       if (url) {
         args[1] = prepareURL(url);
       }
       return proxied.apply(this, args);
-  };
-})();
+    };
+  })();
