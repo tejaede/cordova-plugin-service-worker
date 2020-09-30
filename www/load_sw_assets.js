@@ -2,10 +2,6 @@ var head = document.querySelector("head"),
     scripts = [
         {{SW_ASSETS}}
     ],
-    resolvePolyfillIsReady,
-    polyfillIsReady = new Promise(function (resolve) {
-        resolvePolyfillIsReady = resolve;
-    }), 
     scriptsLoaded = 0;
 
 
@@ -31,7 +27,3 @@ function loadNext() {
     });
 }
 loadNext();
-
-// scripts.forEach(function (script) {
-//     loadScript(script);
-// });

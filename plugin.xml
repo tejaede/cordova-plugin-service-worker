@@ -80,7 +80,7 @@
         <asset src="www/sw_templates/resolve-polyfill-is-ready.js" target="sw_templates/resolve-polyfill-is-ready.js" />
 
         <!-- Tools used to load assets / worker via script tag -->
-        <asset src="www/load_sw_assets.js" target="www/load_sw_assets.js" />
+        <asset src="www/load_sw_assets.js" target="load_sw_assets.js" />
         <asset src="www/load_sw.js" target="load_sw.js" />
 
         <config-file target="config.xml" parent="/*">
