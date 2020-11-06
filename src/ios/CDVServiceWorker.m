@@ -383,13 +383,17 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 -(BOOL) isURLAPrecachedJavascriptFile: (NSURL *) url {
     NSArray *components = [url pathComponents];
     BOOL isDependency = [components containsObject: @"packages"];
-    return isDependency && [[url pathExtension] isEqualToString:@"js"];
+    return isDependency && [self urlHasJavascriptExtension: url];
 }
 
 -(BOOL) isURLJavascriptDependency: (NSURL *) url {
     NSArray *components = [url pathComponents];
     BOOL isDependency = [components containsObject: @"node_modules"];
-    return isDependency && [[url pathExtension] isEqualToString:@"js"];
+    return isDependency && [self urlHasJavascriptExtension: url];
+}
+
+-(BOOL) urlHasJavascriptExtension: (NSURL *) url {
+    return [[url pathExtension] isEqualToString:@"js"];
 }
 
 - (void)handleTrueFetchScriptMessage: (WKScriptMessage *) message
@@ -949,22 +953,25 @@ NSSet *autoCacheFileNames;
     ServiceWorkerResponse *response;
     #ifdef DEBUG_JAVASCRIPT
      NSURL *baseURL = [[_workerWebView URL] URLByDeletingLastPathComponent];
-     NSString *baseURLPath = [baseURL path];
-     NSString *relativePath = [[[request URL] path] stringByReplacingOccurrencesOfString:baseURLPath withString:@""];
-    if ([relativePath characterAtIndex: 0] == '/') {
-        relativePath = [relativePath substringFromIndex: 1];
+    if (baseURL != nil) {
+        NSString *baseURLPath = [baseURL path];
+        NSString *relativePath = [[[request URL] path] stringByReplacingOccurrencesOfString:baseURLPath withString:@""];
+       if ([relativePath characterAtIndex: 0] == '/') {
+           relativePath = [relativePath substringFromIndex: 1];
+       }
+        NSString *localPath = [NSString stringWithFormat:@"www/sw_assets/%@", relativePath];
+        NSString *script = [self readScriptAtRelativePath: localPath];
+       if (script == nil) {
+           localPath = [NSString stringWithFormat:@"www/sw_templates/%@", relativePath];
+           script = [self readScriptAtRelativePath: localPath];
+       }
+       if (script != nil) {
+           NSData *data = [script dataUsingEncoding:NSUTF8StringEncoding];
+           response = [[ServiceWorkerResponse alloc] initWithUrl: [[request URL] absoluteString] body:data status:@200 headers:[[NSDictionary alloc] init]];
+           return response;
+       }
     }
-     NSString *localPath = [NSString stringWithFormat:@"www/sw_assets/%@", relativePath];
-     NSString *script = [self readScriptAtRelativePath: localPath];
-    if (script == nil) {
-        localPath = [NSString stringWithFormat:@"www/sw_templates/%@", relativePath];
-        script = [self readScriptAtRelativePath: localPath];
-    }
-    if (script != nil) {
-        NSData *data = [script dataUsingEncoding:NSUTF8StringEncoding];
-        response = [[ServiceWorkerResponse alloc] initWithUrl: [[request URL] absoluteString] body:data status:@200 headers:[[NSDictionary alloc] init]];
-        return response;
-    }
+    
     #endif
     if (AUTO_CACHE_ENABLED) {
         response = [[self cacheApi] matchInternal:request];

@@ -119,7 +119,8 @@
     NSMutableArray *candidateEntries = [[NSMutableArray alloc] init];
     for (ServiceWorkerCacheEntry *entry in entries) {
         ServiceWorkerResponse *cachedResponse = (ServiceWorkerResponse *)[NSKeyedUnarchiver unarchiveObjectWithData:entry.response];
-        NSString *varyHeader = cachedResponse.headers[@"Vary"];
+//        NSString *varyHeader = cachedResponse.headers[@"Vary"];
+        NSString *varyHeader;
         BOOL candidateIsViable = YES;
         if (varyHeader != nil) {
             NSURLRequest *originalRequest = (NSURLRequest *)[NSKeyedUnarchiver unarchiveObjectWithData:entry.request];
