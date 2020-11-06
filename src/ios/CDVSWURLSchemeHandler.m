@@ -65,20 +65,14 @@
     CDVSWURLSchemeHandler * __weak weakSelf = self;
     NSMutableURLRequest *schemedRequest = (NSMutableURLRequest *)[schemeTask request];
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestForURLRequest:schemedRequest];
-//    NSLog(@"initiateDataTaskForRequest: %@", [[request URL] absoluteString]);
-    if ([[[schemedRequest URL] absoluteString] containsString:@"languages"]) {
-        NSLog(@"initiateDataTaskForRequest: %@", [[request URL] absoluteString]);
-    }
-//    [[[request URL] absoluteString] containsString:@"languages"];
     NSURLSession *session = [self session];
     if (request != nil) {
         NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
-//            NSLog(@"Complete Task: %@", [[request URL] absoluteString]);
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             NSMutableDictionary *allHeaders = [NSMutableDictionary dictionaryWithDictionary: [httpResponse allHeaderFields]];
-            //TODO Pass CORS origin in from outside
             [allHeaders setValue:[NSString stringWithFormat: @"cordova-main://%@", self.allowedOrigin] forKey:@"Access-Control-Allow-Origin"];
             [allHeaders setValue:@"true" forKey:@"Access-Control-Allow-Credentials"];
+            
 
             NSHTTPURLResponse *updatedResponse = [[NSHTTPURLResponse alloc] initWithURL:[[schemeTask request] URL] statusCode:httpResponse.statusCode HTTPVersion:@"2.0" headerFields:allHeaders];
             [_delegate urlSchemeHandlerDidReceiveResponse: updatedResponse withData: data forRequest: [swRequest schemedRequest]];
@@ -86,7 +80,6 @@
         }];
         [dataTask resume];
         swRequest.dataTask = dataTask;
-//        NSLog(@"Send Request: %@ %@", [request HTTPMethod], [[request URL] absoluteString]);
     }
     else {
         NSLog(@"Cannot send data task for nil request %@", [schemeTask request]);
