@@ -26,6 +26,9 @@
 @property (nonatomic, strong) NSNumber *status;
 @property (nonatomic, strong) NSDictionary *headers;
 
+@property (nonatomic, strong) NSString *contentType;
+@property (nonatomic) BOOL isBodyPlainText;
+
 + (ServiceWorkerResponse *)responseFromJSValue:(JSValue *)value;
 + (ServiceWorkerResponse *)responseFromDictionary:(NSDictionary *)dictionary;
 + (ServiceWorkerResponse *)responseWithHTTPResponse:(NSHTTPURLResponse *)response andBody: (NSData *) body;

@@ -20,8 +20,97 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 #import "ServiceWorkerResponse.h"
 
+@interface MimeType : NSObject
+
+@property NSSet *fileExtensions;
+@property NSString *name;
+@property BOOL isPlainText;
+
++ (MimeType *) forName: (NSString *) name;
++ (MimeType *) forFileExtension: (NSString *) extension;
+
+@end
+ 
+@implementation MimeType
+
+@synthesize name = _name;
+@synthesize fileExtensions = _fileExtensions;
+@synthesize isPlainText = _isPlainText;
+
+static NSDictionary *_mimeTypesByFileExtension;
+static NSDictionary *_mimeTypesByName;
+
+static NSArray *_known;
++ (NSArray *) known {
+    if (!_known) {
+        _known = @[
+            [MimeType mimeTypeWithName: @"text/css" fileExtensions: @[@"css"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"text/csv" fileExtensions: @[@"csv"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"text/html" fileExtensions: @[@"htm", @"html"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"text/javascript" fileExtensions: @[@"js"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"application/javascript" fileExtensions: @[@"js"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"application/json" fileExtensions: @[@"json"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"text/plain" fileExtensions: @[@"txt", @"manifest"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"application/svg+xml" fileExtensions: @[@"svg"] andIsPlainText: true],
+            [MimeType mimeTypeWithName: @"application/xml" fileExtensions: @[@"xml"] andIsPlainText: true]
+        ];
+    }
+    return _known;
+}
+
++ (NSDictionary *) mimeTypesByName {
+    if (_mimeTypesByName == nil) {
+        NSMutableDictionary *dictInitializer = [NSMutableDictionary new];
+        for (MimeType *type in [self known]) {
+            [dictInitializer setValue:type forKey:[type name]];
+        }
+        _mimeTypesByName = [NSDictionary dictionaryWithDictionary:dictInitializer];
+    }
+    return _mimeTypesByName;
+}
+
++ (NSDictionary *) mimeTypesByFileExtension {
+    if (_mimeTypesByFileExtension == nil) {
+        NSMutableDictionary *dictInitializer = [NSMutableDictionary new];
+        for (MimeType *type in [self known]) {
+            for (NSString *ext in [type fileExtensions]) {
+                [dictInitializer setValue:type forKey: ext];
+            }
+        }
+        _mimeTypesByFileExtension = [NSDictionary dictionaryWithDictionary:dictInitializer];
+    }
+    return _mimeTypesByFileExtension;
+}
+
+
++ (MimeType *) mimeTypeWithName: (NSString *)name fileExtensions:(NSArray *)fileExtensions andIsPlainText: (BOOL) isPlainText {
+    return [[MimeType alloc] initWithName:name fileExtensions:fileExtensions andIsPlainText:isPlainText];
+}
+
++ (MimeType *) forName: (NSString *) name {
+    return [[MimeType mimeTypesByName] valueForKey:name];
+}
+
++ (MimeType *) forFileExtension: (NSString *) extension {
+    return [[MimeType mimeTypesByFileExtension] valueForKey:extension];
+}
+ 
+- (id) initWithName:(NSString *)name fileExtensions:(NSArray *)fileExtensions andIsPlainText: (BOOL) isPlainText {
+    if (self = [super init]) {
+        _name = name;
+        _fileExtensions = [NSSet setWithArray: fileExtensions];
+        _isPlainText = isPlainText;
+    }
+    return self;
+}
+ 
+@end
+
 @implementation ServiceWorkerResponse
 
+
+@synthesize contentType = _contentType;
+@synthesize isBodyPlainText = _isBodyPlainText;
 //TODO Convert URL to NSURL
 @synthesize url = _url;
 @synthesize body = _body;
@@ -70,6 +159,30 @@
     return [[ServiceWorkerResponse alloc] initWithUrl:url body:body status:status headers:headers];
 }
 
+
+- (BOOL) isBodyPlainText {
+    MimeType* mimeType = [self mimeType];
+    return mimeType != nil ? [mimeType isPlainText] : NO;
+}
+
+MimeType *_mimeType;
+- (MimeType *) mimeType {
+    if (_mimeType == nil) {
+        NSString *contentType = [self contentType];
+        NSString *extension = _url != nil ? [_url pathExtension] : nil;
+        _mimeType = [MimeType forName: contentType];
+        _mimeType = _mimeType    ? _mimeType : [MimeType forFileExtension: extension];
+    }
+    return _mimeType;
+}
+
+- (NSString *) contentType {
+    if (_contentType == nil && _headers != nil) {
+        _contentType = [_headers objectForKey:@"Content-Type"] != nil ? [_headers objectForKey:@"Content-Type"] : [_headers objectForKey:@"content-type"];
+    }
+    return _contentType;
+}
+
 - (NSDictionary *)toDictionary {
     // Convert the body to base64.
     if (self.url == nil) {
@@ -78,7 +191,7 @@
     } else {
         NSString *encodedBody;
         NSURL *aUrl = [NSURL URLWithString:[self url]];
-        BOOL isPlainText = [[aUrl pathExtension] isEqualToString:@"js"];
+        BOOL isPlainText = [self isBodyPlainText];
         if (isPlainText) {
             encodedBody = [[NSString alloc] initWithData:self.body encoding:NSUTF8StringEncoding];
         }
@@ -115,4 +228,6 @@
 }
 
 @end
+
+
 
