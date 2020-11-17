@@ -32,7 +32,9 @@
 
 - (void)webView:(WKWebView *)webView startURLSchemeTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
-    NSLog(@"Handle Schemed URL - %@ %@",[[urlSchemeTask request] HTTPMethod],  [[[urlSchemeTask request] URL] absoluteString]);
+    #ifdef DEBUG_SCHEME_HANDLER
+        NSLog(@"Handle Schemed URL - %@ %@",[[urlSchemeTask request] HTTPMethod],  [[[urlSchemeTask request] URL] absoluteString]);
+    #endif
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithURLSchemeTask: urlSchemeTask];
     if (_queueHandler != nil && [_queueHandler canAddToQueue]) {
         [_queueHandler addRequestToQueue: swRequest];
@@ -45,7 +47,9 @@
     
     ServiceWorkerResponse* response = [_delegate urlSchemeHandlerWillSendRequest: request];
     if (response != nil) {
-        NSLog(@"Return Cached Response: %@", [[request URL] absoluteString]);
+        #ifdef DEBUG_CACHE
+            NSLog(@"Return Cached Response: %@", [[request URL] absoluteString]);
+        #endif
         NSData *data = [response body];
         NSHTTPURLResponse *httpUrlResponse = [[NSHTTPURLResponse alloc] initWithURL:[request URL] statusCode:[[response status] integerValue] HTTPVersion:@"2.0" headerFields:[response headers]];
         [self completeTask:task response:httpUrlResponse data: data error: nil];
@@ -66,7 +70,11 @@
     NSMutableURLRequest *schemedRequest = (NSMutableURLRequest *)[schemeTask request];
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestForURLRequest:schemedRequest];
     NSURLSession *session = [self session];
+   
     if (request != nil) {
+        #ifdef DEBUG_SCHEME_HANDLER
+            NSLog(@"initiateDataTaskForRequest URL - %@ %@", [request HTTPMethod],  [[request URL] absoluteString]);
+        #endif
         NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             NSMutableDictionary *allHeaders = [NSMutableDictionary dictionaryWithDictionary: [httpResponse allHeaderFields]];

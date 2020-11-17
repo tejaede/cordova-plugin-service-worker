@@ -443,7 +443,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
                 [self sendResultToWorker:messageId parameters: nil withError: error];
             } else {
                 if (isImportScriptRequest || isJavascriptDependency) {
-                    NSLog(@"Cache Import Scripts: %@", url);
+                    #ifdef DEBUG_CACHE
+                        NSLog(@"Cache Import Scripts: %@", url);
+                    #endif
                     [[self cacheApi] putInternal:request swResponse:swResponse];
                 }
                 NSDictionary *responseDict = [swResponse toDictionary];
@@ -949,7 +951,9 @@ NSSet *autoCacheFileNames;
 }
 
 - (ServiceWorkerResponse *)urlSchemeHandlerWillSendRequest: (NSURLRequest *) request {
+#ifdef DEBUG_SCHEME_HANDLER
     NSLog(@"urlSchemeHandlerWillSendRequest: %@", [[request URL] absoluteString]);
+#endif
     ServiceWorkerResponse *response;
     #ifdef DEBUG_JAVASCRIPT
      NSURL *baseURL = [[_workerWebView URL] URLByDeletingLastPathComponent];
@@ -1008,7 +1012,9 @@ NSSet *autoCacheFileNames;
 
     for (ServiceWorkerRequest *swRequest in self.requestQueue) {
         // Log!
-        NSLog(@"Processing from queue: %@", [[swRequest.schemedRequest URL] absoluteString]);
+        #ifdef DEBUG_SCHEME_HANDLER
+            NSLog(@"Processing from queue: %@", [[swRequest.schemedRequest URL] absoluteString]);
+        #endif
 
         // Fire a fetch event in the JSContext.
         NSURLRequest *request = swRequest.schemedRequest;

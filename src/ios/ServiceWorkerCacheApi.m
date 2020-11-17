@@ -167,7 +167,9 @@ static ServiceWorkerCacheApi *sharedInstance;
 
 - (void)pluginInitialize
 {
-    NSLog(@"ServiceWorkerCacheApi.pluginInitialize");
+    #ifdef DEBUG_CACHE
+        NSLog(@"ServiceWorkerCacheApi.pluginInitialize");
+    #endif
     self.absoluteScope = @"/";
     self.cacheCordovaAssets = false;
     [self initializeStorage];
@@ -533,8 +535,9 @@ static ServiceWorkerCacheApi *sharedInstance;
     // Convert the given request into an NSURLRequest.
     NSURLRequest *urlRequest = [self nativeRequestForScriptMessageParameter: request];
     
-    
-    NSLog(@"handleCacheMatchScriptMessage: %@", [[urlRequest URL] absoluteString]);
+    #ifdef DEBUG_CACHE
+        NSLog(@"handleCacheMatchScriptMessage: %@", [[urlRequest URL] absoluteString]);
+    #endif
 
     // Check for a match in the cache.
     // TODO: Deal with multiple matches.
@@ -570,7 +573,9 @@ static ServiceWorkerCacheApi *sharedInstance;
         }
     }
     
-    NSLog(@"Cache %@: %@", cachedResponse == nil ? @"MISS" : @"HIT", [[urlRequest URL] absoluteString]);
+    #ifdef DEBUG_CACHE
+        NSLog(@"Cache %@: %@", cachedResponse == nil ? @"MISS" : @"HIT", [[urlRequest URL] absoluteString]);
+    #endif
     if (cachedResponse != nil) {
         
         // Convert the response to a dictionary and send it to the promise resolver.
@@ -721,8 +726,10 @@ WKWebView *_webView = nil;
 
     // Convert the given request into an NSURLRequest.
     NSURLRequest *urlRequest = [self nativeRequestForScriptMessageParameter: request];
-    NSLog(@"ServiceWorkerCacheApi.put (%@) - %@", cacheName, [[urlRequest URL] absoluteString]);
-    ;
+    
+    #ifdef DEBUG_CACHE
+        NSLog(@"ServiceWorkerCacheApi.put (%@) - %@", cacheName, [[urlRequest URL] absoluteString]);
+    #endif
     
     // Convert the response into a ServiceWorkerResponse.
     ServiceWorkerResponse *serviceWorkerResponse = [ServiceWorkerResponse responseFromJSValue:response];
@@ -824,7 +831,9 @@ NSString *internalCacheName = @"__cordova_sw_internal__";
     NSString *cacheName = [command argumentAtIndex:0];
     NSDictionary *request = [command argumentAtIndex: 1];
     NSDictionary *options = [command argumentAtIndex: 2];
-    NSLog(@"ServiceWorkerCacheAPI.matchAll: %@", cacheName);
+    #ifdef DEBUG_CACHE
+        NSLog(@"ServiceWorkerCacheAPI.matchAll: %@", cacheName);
+    #endif
 
     CDVPluginResult *result;
     result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:nil];
@@ -837,7 +846,9 @@ NSString *internalCacheName = @"__cordova_sw_internal__";
     NSString *cacheName = [command argumentAtIndex:0];
     NSDictionary *request = [command argumentAtIndex: 1];
     NSDictionary *options = [command argumentAtIndex: 2];
-    NSLog(@"ServiceWorkerCacheAPI.delete: %@", cacheName);
+    #ifdef DEBUG_CACHE
+        NSLog(@"ServiceWorkerCacheAPI.delete: %@", cacheName);
+    #endif
 
     CDVPluginResult *result;
     result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"OK"];
