@@ -357,7 +357,7 @@ Response.createResponseForServiceWorkerResponse = function (serviceWorkerRespons
     isEncoded,
     body;
   if (serviceWorkerResponse) {
-    isEncoded = serviceWorkerResponse.isEncoded ? parseInt(serviceWorkerResponse.isEncoded) : !serviceWorkerResponse.url.endsWith(".js");
+    isEncoded = serviceWorkerResponse.isEncoded !== undefined ? parseInt(serviceWorkerResponse.isEncoded) : !serviceWorkerResponse.url.endsWith(".js");
     body = isEncoded ? window.atob(serviceWorkerResponse.body) : serviceWorkerResponse.body;
     response = new Response(body, {
       status: serviceWorkerResponse.status,
@@ -421,6 +421,18 @@ Response.prototype.base64EncodedString = function () {
     }
     return url;
   }
+
+function serializedBodyForRequest(request) {
+  if (request.arrayBuffer) {
+    return request.arrayBuffer().then(function (arrayBuffer) {
+      return arrayBufferToBase64String(arrayBuffer);
+    });
+  } else {
+    return request.text().then(function (text) {
+      return window.btoa(text);
+    });
+  }
+}
   var originalFetch = window.fetch;
   window.fetch = function (requestOrURL, init) {
     var shouldSerializeBody = false,
@@ -452,9 +464,9 @@ Response.prototype.base64EncodedString = function () {
       options = init || {};
     }
     shouldSerializeBody = options.method === "POST" && !isBodyNativeFormData;
+
     if (shouldSerializeBody) {
-      return requestOrURL.arrayBuffer().then(function (arrayBuffer) {
-        var text = arrayBufferToBase64String(arrayBuffer);
+      return serializedBodyForRequest(requestOrURL).then(function (text) {
         options = {
           method: options.method,
           headers: options.headers,
@@ -469,7 +481,7 @@ Response.prototype.base64EncodedString = function () {
           keepalive: options.keepalive,
           signal: options.signal
         };
-        return originalFetch.call(window, url, options);
+        return originalFetch.call(window, new Request(url, options));
       });
     } else {
       return originalFetch.call(window, new Request(url, options));

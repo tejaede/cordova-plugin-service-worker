@@ -96,10 +96,6 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
             schemedURL = [_outgoingRequest URL];
             scheme = [schemedURL scheme];
             NSURL *outgoingURL;
-            if (scheme == nil) {
-                NSLog(@"Test");
-                return nil;
-            }
             if (![scheme isEqualToString:@"https"]) {
                 outgoingURLString = [[schemedURL absoluteString] stringByReplacingOccurrencesOfString: scheme withString: @"https"];
                 outgoingURL = [NSURL URLWithString:outgoingURLString];
@@ -112,7 +108,11 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
                 if (![contentType containsString:@"multipart/form-data"]) {
                     NSData *body = [_schemedRequest HTTPBody];
                     NSData *decodedBody = [[NSData alloc] initWithBase64EncodedData:body options:NSDataBase64DecodingIgnoreUnknownCharacters];
-                    [_outgoingRequest setHTTPBody:decodedBody];
+                    if (decodedBody) {
+                        [_outgoingRequest setHTTPBody:decodedBody];
+                    } else {
+                        [_outgoingRequest setHTTPBody:body];
+                    }
                 }
             }
             [_outgoingRequest setCachePolicy:NSURLRequestReloadIgnoringLocalCacheData];
@@ -172,6 +172,8 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
         }
         httpBody = [self makeTrueFetchHTTPRequestMultipartBody: (NSDictionary *) body boundary: boundary];
         [headers setValue:contentType forKey:@"content-type"];
+    } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0) {
+        httpBody = [[NSData alloc] initWithBase64EncodedString:(NSString*)body options:NSDataBase64DecodingIgnoreUnknownCharacters];
     }
     [request setHTTPMethod:method];
     if (headers != nil) {
