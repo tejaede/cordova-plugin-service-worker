@@ -53,7 +53,7 @@ NSString * const SERVICE_WORKER_ASSETS_RELATIVE_PATH = @"www/sw_assets";
 
 NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
 
-static bool isServiceWorkerActive = NO;
+static bool isServiceWorkerActive = YES;
 
 
 bool AUTO_CACHE_ENABLED = YES;
@@ -75,6 +75,30 @@ CDVSWURLSchemeHandler *mainUrlSchemeHandler;
 NSURL *_clientUrl = nil;
 NSString *swShellFileName = nil;
 NSString *swClientApplicationUrl = nil;
+
+NSSet *_urlsToDebug;
+- (NSSet *) _urlsToDebug {
+    if (_urlsToDebug == nil) {
+        _urlsToDebug = [[NSSet alloc] initWithArray:@[
+        ]];
+    }
+    return _urlsToDebug;
+}
+
+- (BOOL) shouldDebugURL: (NSURL *) url {
+    NSString *urlString = [url absoluteString];
+    return [self shouldDebugURLString: urlString];
+}
+
+- (BOOL) shouldDebugURLString: (NSString *) urlString {
+    BOOL found = [[self _urlsToDebug] count] == 0;
+    NSString *testString;
+    for (testString in [self _urlsToDebug]) {
+        found = found || [urlString containsString:testString];
+    }
+    return found;
+}
+
 
 - (void)onReset {
     NSLog(@"CDVServiceWorker.onReset");
@@ -374,6 +398,12 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSNumber *status = response[@"status"];
 //    NSString *url = [response[@"url"] toString]; // TODO: Can this ever be different than the request url? if not, don't allow it to be overridden
     NSString *url = response[@"url"];
+    
+    #ifdef DEBUG_SCHEME_HANDLER
+        if ([self shouldDebugURLString: url]) {
+            NSLog(@"handleFetchResponseScriptMessage - %@", url);
+        }
+    #endif
         
     NSHTTPURLResponse *urlResponse = [[NSHTTPURLResponse alloc] initWithURL:[NSURL URLWithString:url] statusCode:[status integerValue] HTTPVersion:@"2.0" headerFields:headers];
     
@@ -429,13 +459,26 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     }
 
     if (response != nil) {
-        NSLog(@"Return Cached True Fetch: %@", url);
+        #ifdef DEBUG_SCHEME_HANDLER
+            if ([self shouldDebugURL: url]) {
+                NSLog(@"Return Cached True Fetch: %@", url);
+            }
+        #endif
         NSDictionary *responseDict = [response toDictionary];
         [self sendResultToWorker:messageId parameters: responseDict];
     } else {
-//        NSLog(@"Send True Fetch %@", url);
+        #ifdef DEBUG_SCHEME_HANDLER
+            if ([self shouldDebugURL: url]) {
+                NSLog(@"handleTrueFetchScriptMessage SEND - %@", [url absoluteString]);
+            }
+        #endif
         NSURLSession *session = [NSURLSession sharedSession];
         NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
+            #ifdef DEBUG_SCHEME_HANDLER
+                if ([self shouldDebugURL: url]) {
+                    NSLog(@"handleTrueFetchScriptMessage DONE %@", [url absoluteString]);
+                }
+            #endif
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             ServiceWorkerResponse *swResponse = [ServiceWorkerResponse responseWithHTTPResponse:httpResponse andBody:data];
             if (error != nil) {
@@ -444,10 +487,17 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
             } else {
                 if (isImportScriptRequest || isJavascriptDependency) {
                     #ifdef DEBUG_CACHE
+                    if ([self shouldDebugURL: url]) {
                         NSLog(@"Cache Import Scripts: %@", url);
+                    }
                     #endif
                     [[self cacheApi] putInternal:request swResponse:swResponse];
                 }
+                #ifdef DEBUG_SCHEME_HANDLER
+                    if ([self shouldDebugURL: url]) {
+                        NSLog(@"handleTrueFetchScriptMessage DONE %@", [url absoluteString]);
+                    }
+                #endif
                 NSDictionary *responseDict = [swResponse toDictionary];
                 [self sendResultToWorker:messageId parameters: responseDict];
             }
@@ -493,7 +543,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     } else {
         postMessageCode = [NSString stringWithFormat:@"window.postMessage(Kamino.parse('%@'), '*');'';", body];
     }
-
     [self evaluateScript:postMessageCode inWebView:mainWebView callback: nil];
 }
 
@@ -702,7 +751,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSData *data = [message dataUsingEncoding:NSUTF8StringEncoding];
     message = [data base64EncodedStringWithOptions:NSUTF8StringEncoding];
     NSString *dispatchCode = [NSString stringWithFormat:[postMessageTemplate content], message];
-
     [self evaluateScript:dispatchCode];
 }
 
@@ -951,9 +999,11 @@ NSSet *autoCacheFileNames;
 }
 
 - (ServiceWorkerResponse *)urlSchemeHandlerWillSendRequest: (NSURLRequest *) request {
-#ifdef DEBUG_SCHEME_HANDLER
-    NSLog(@"urlSchemeHandlerWillSendRequest: %@", [[request URL] absoluteString]);
-#endif
+    #ifdef DEBUG_SCHEME_HANDLER
+    if ([self shouldDebugURL:[request URL]]) {
+        NSLog(@"urlSchemeHandlerWillSendRequest: %@", [[request URL] absoluteString]);
+    }
+    #endif
     ServiceWorkerResponse *response;
     #ifdef DEBUG_JAVASCRIPT
      NSURL *baseURL = [[_workerWebView URL] URLByDeletingLastPathComponent];
@@ -979,7 +1029,11 @@ NSSet *autoCacheFileNames;
     #endif
     if (AUTO_CACHE_ENABLED) {
         response = [[self cacheApi] matchInternal:request];
-        NSLog(@"Response Found For Request: %@ %@", response == nil ? @"NO" : @"YES", [[request URL] absoluteString]);
+        #ifdef DEBUG_CACHE
+        if ([self shouldDebugURL:[request URL]]) {
+            NSLog(@"Response Found For Request: %@ %@", response == nil ? @"NO" : @"YES", [[request URL] absoluteString]);
+        }
+        #endif
     }
     return response;
 }
@@ -1013,7 +1067,9 @@ NSSet *autoCacheFileNames;
     for (ServiceWorkerRequest *swRequest in self.requestQueue) {
         // Log!
         #ifdef DEBUG_SCHEME_HANDLER
+        if ([self shouldDebugURL: [swRequest.schemedRequest URL]]) {
             NSLog(@"Processing from queue: %@", [[swRequest.schemedRequest URL] absoluteString]);
+        }
         #endif
 
         // Fire a fetch event in the JSContext.

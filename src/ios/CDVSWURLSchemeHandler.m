@@ -23,6 +23,30 @@
 @synthesize allowedOrigin = _allowedOrigin;
 
 
+NSSet *_urlsToDebug;
+- (NSSet *) _urlsToDebug {
+    if (_urlsToDebug == nil) {
+        _urlsToDebug = [[NSSet alloc] initWithArray:@[
+        ]];
+    }
+    return _urlsToDebug;
+}
+
+- (BOOL) shouldDebugURL: (NSURL *) url {
+    NSString *urlString = [url absoluteString];
+    return [self shouldDebugURLString: urlString];
+}
+
+- (BOOL) shouldDebugURLString: (NSString *) urlString {
+    BOOL found = [[self _urlsToDebug] count] == 0;
+    NSString *testString;
+    for (testString in [self _urlsToDebug]) {
+        found = found || [urlString containsString:testString];
+    }
+    return found;
+}
+
+
 - (NSURLSession *) session {
     if (_session == nil) {
         _session = [NSURLSession sharedSession];
@@ -33,7 +57,9 @@
 - (void)webView:(WKWebView *)webView startURLSchemeTask:(id <WKURLSchemeTask>)urlSchemeTask
 {
     #ifdef DEBUG_SCHEME_HANDLER
-        NSLog(@"Handle Schemed URL - %@ %@",[[urlSchemeTask request] HTTPMethod],  [[[urlSchemeTask request] URL] absoluteString]);
+    if ([self shouldDebugURL:[[urlSchemeTask request] URL]]) {
+        NSLog(@"Handle Schemed URL - %@ %@ %@", (_queueHandler != nil ? @"MAIN" : @"SW"), [[urlSchemeTask request] HTTPMethod],  [[[urlSchemeTask request] URL] absoluteString]);
+    }
     #endif
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithURLSchemeTask: urlSchemeTask];
     if (_queueHandler != nil && [_queueHandler canAddToQueue]) {
@@ -47,8 +73,11 @@
     
     ServiceWorkerResponse* response = [_delegate urlSchemeHandlerWillSendRequest: request];
     if (response != nil) {
+        
         #ifdef DEBUG_CACHE
-            NSLog(@"Return Cached Response: %@", [[request URL] absoluteString]);
+        if ([self shouldDebugURL:[request URL]]) {
+            NSLog(@"Return Cached Response:  %@ %@", (_queueHandler ? @"MAIN" : @"SW"), [[request URL] absoluteString]);
+        }
         #endif
         NSData *data = [response body];
         NSHTTPURLResponse *httpUrlResponse = [[NSHTTPURLResponse alloc] initWithURL:[request URL] statusCode:[[response status] integerValue] HTTPVersion:@"2.0" headerFields:[response headers]];
@@ -73,13 +102,25 @@
    
     if (request != nil) {
         #ifdef DEBUG_SCHEME_HANDLER
-            NSLog(@"initiateDataTaskForRequest URL - %@ %@", [request HTTPMethod],  [[request URL] absoluteString]);
+            if ([self shouldDebugURL:[request URL]]) {
+                NSLog(@"initiateDataTaskForRequest URL - %@ %@ %@", (_queueHandler ? @"MAIN" : @"SW"), [request HTTPMethod],  [[request URL] absoluteString]);
+            }
         #endif
         NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             NSMutableDictionary *allHeaders = [NSMutableDictionary dictionaryWithDictionary: [httpResponse allHeaderFields]];
             [allHeaders setValue:[NSString stringWithFormat: @"cordova-main://%@", self.allowedOrigin] forKey:@"Access-Control-Allow-Origin"];
+//            [allHeaders setValue:[NSString stringWithFormat: @"contour-spec://%@", self.allowedOrigin] forKey:@"Access-Control-Allow-Origin"];
             [allHeaders setValue:@"true" forKey:@"Access-Control-Allow-Credentials"];
+            
+            #ifdef DEBUG_SCHEME_HANDLER
+                if ([self shouldDebugURL:[request URL]]) {
+                    NSInteger status = [httpResponse statusCode];
+                    NSLog(@"initiateDataTaskForRequest DONE - %@ %ld %@ %@ %lu", (_queueHandler ? @"MAIN" : @"SW"), (long)status, [request HTTPMethod],  [[request URL] absoluteString], (unsigned long)[data length]);
+                }
+            #endif
+            
+            
             
 
             NSHTTPURLResponse *updatedResponse = [[NSHTTPURLResponse alloc] initWithURL:[[schemeTask request] URL] statusCode:httpResponse.statusCode HTTPVersion:@"2.0" headerFields:allHeaders];
@@ -96,6 +137,12 @@
 
 - (void) sendRequestWithId:(NSNumber *) requestId {
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithId: (NSNumber*)requestId];
+    #ifdef DEBUG_SCHEME_HANDLER
+        if ([self shouldDebugURL: [[swRequest outgoingRequest] URL]]) {
+            NSLog(@"sendRequestWithId - %@ %@ %@", (_queueHandler ? @"MAIN" : @"SW"), [[swRequest outgoingRequest] HTTPMethod], [[[swRequest outgoingRequest] URL] absoluteString]);
+        }
+    #endif
+    
     [self sendSWRequest:swRequest];
 }
  

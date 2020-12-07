@@ -165,6 +165,32 @@ static ServiceWorkerCacheApi *sharedInstance;
     return sharedInstance;
 }
 
+NSSet *_urlsToDebug;
+- (NSSet *) _urlsToDebug {
+    if (_urlsToDebug == nil) {
+        _urlsToDebug = [[NSSet alloc] initWithArray:@[
+            @"country_srv/v1/timeZones",
+            @"command/rest/languages"
+        ]];
+    }
+    return _urlsToDebug;
+}
+
+- (BOOL) shouldDebugURL: (NSURL *) url {
+    NSString *urlString = [url absoluteString];
+    return [self shouldDebugURLString: urlString];
+}
+
+- (BOOL) shouldDebugURLString: (NSString *) urlString {
+    BOOL found = [[self _urlsToDebug] count] == 0;
+    NSString *testString;
+    for (testString in [self _urlsToDebug]) {
+        found = found || [urlString containsString:testString];
+    }
+    return found;
+}
+
+
 - (void)pluginInitialize
 {
     #ifdef DEBUG_CACHE
@@ -536,7 +562,9 @@ static ServiceWorkerCacheApi *sharedInstance;
     NSURLRequest *urlRequest = [self nativeRequestForScriptMessageParameter: request];
     
     #ifdef DEBUG_CACHE
+    if ([self shouldDebugURL: [urlRequest URL]]) {
         NSLog(@"handleCacheMatchScriptMessage: %@", [[urlRequest URL] absoluteString]);
+    }
     #endif
 
     // Check for a match in the cache.
@@ -574,7 +602,9 @@ static ServiceWorkerCacheApi *sharedInstance;
     }
     
     #ifdef DEBUG_CACHE
+    if ([self shouldDebugURL: [urlRequest URL]]) {
         NSLog(@"Cache %@: %@", cachedResponse == nil ? @"MISS" : @"HIT", [[urlRequest URL] absoluteString]);
+    }
     #endif
     if (cachedResponse != nil) {
         
@@ -728,7 +758,9 @@ WKWebView *_webView = nil;
     NSURLRequest *urlRequest = [self nativeRequestForScriptMessageParameter: request];
     
     #ifdef DEBUG_CACHE
+    if ([self shouldDebugURL: [urlRequest URL]]) {
         NSLog(@"ServiceWorkerCacheApi.put (%@) - %@", cacheName, [[urlRequest URL] absoluteString]);
+    }
     #endif
     
     // Convert the response into a ServiceWorkerResponse.
