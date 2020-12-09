@@ -9,12 +9,12 @@ Clients.prototype.claim = function () {
 
 // TODO: Add `options`.
 Clients.prototype.getAll = function() {
-  return this.clientList;
+  return this.clientList.slice();
 };
 
 // TODO: Add `options`.
 Clients.prototype.matchAll = function () {
-  return Promise.resolve(this.clientList);
+  return Promise.resolve(this.clientList.slice());
 };
 
 var clients = new Clients([]);

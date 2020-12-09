@@ -423,13 +423,14 @@ Response.prototype.base64EncodedString = function () {
   }
 
 function serializedBodyForRequest(request) {
+  var contentType = request.headers.get("content-type");
   if (request.arrayBuffer) {
     return request.arrayBuffer().then(function (arrayBuffer) {
       return arrayBufferToBase64String(arrayBuffer);
     });
   } else {
     return request.text().then(function (text) {
-      return window.btoa(text);
+      return contentType === "application/json" ? text : window.btoa(text);
     });
   }
 }

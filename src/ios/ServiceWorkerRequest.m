@@ -51,7 +51,7 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest new];
 //    swRequest.requestId = requestId;
     swRequest.originalRequestDict = requestDict;
-//    [[ServiceWorkerRequest requestsById] setValue:swRequest forKey: [requestId stringValue]];
+//    [[ServiceWorkerRequest requestsById] setValue:reswRequest forKey: [requestId stringValue]];
     return swRequest;
 }
 
@@ -105,8 +105,10 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
             [_outgoingRequest setURL:outgoingURL];
             if ([[_outgoingRequest HTTPMethod] isEqualToString: @"POST"]) {
                 NSString * contentType = [_outgoingRequest valueForHTTPHeaderField:@"content-type"];
-                if (![contentType containsString:@"multipart/form-data"]) {
-                    NSData *body = [_schemedRequest HTTPBody];
+                NSData *body = [_schemedRequest HTTPBody];
+                if (![self isBodyBase64Encoded]) {
+                    [_outgoingRequest setHTTPBody:body];
+                } else if (![contentType containsString:@"multipart/form-data"]) {
                     NSData *decodedBody = [[NSData alloc] initWithBase64EncodedData:body options:NSDataBase64DecodingIgnoreUnknownCharacters];
                     if (decodedBody) {
                         [_outgoingRequest setHTTPBody:decodedBody];
@@ -125,6 +127,20 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
     }
     return _outgoingRequest;
 }
+
+
+NSNumber* _internalIsBodyBase64Encoded;
+- (Boolean) isBodyBase64Encoded {
+    if  (_internalIsBodyBase64Encoded == nil) {
+        _internalIsBodyBase64Encoded = @1;
+    }
+    return [_internalIsBodyBase64Encoded isEqualToNumber: @1];
+}
+
+- (void) setIsBodyBase64Encoded: (Boolean) isEncoded {
+    _internalIsBodyBase64Encoded = isEncoded ? @1 : @0;
+}
+
 
 
 - (NSMutableURLRequest *) schemedRequest {
@@ -172,6 +188,9 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
         }
         httpBody = [self makeTrueFetchHTTPRequestMultipartBody: (NSDictionary *) body boundary: boundary];
         [headers setValue:contentType forKey:@"content-type"];
+    } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0 && [contentType isEqualToString:@"application/json"]) {
+        httpBody = [(NSString *)body dataUsingEncoding:NSUTF8StringEncoding];
+        self.isBodyBase64Encoded = NO;
     } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0) {
         httpBody = [[NSData alloc] initWithBase64EncodedString:(NSString*)body options:NSDataBase64DecodingIgnoreUnknownCharacters];
     }
