@@ -36,7 +36,7 @@
 @property (nonatomic, strong) NSMutableURLRequest *schemedRequest;
 @property (nonatomic, strong) NSNumber *requestId;
 @property (nonatomic, retain) id <WKURLSchemeTask> schemeTask;
-@property (nonatomic) Boolean isBodyBase64Encoded;
+@property (nonatomic) Boolean *isBodyBase64Encoded;
 
 @property (nonatomic, retain) NSURLSessionDataTask *dataTask;
 

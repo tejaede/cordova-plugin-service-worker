@@ -389,13 +389,18 @@ Response.prototype.toDict = function () {
 };
 
 function arrayBufferToBase64String(arrayBuffer) {
+  var string = arrayBufferToString(arrayBuffer);
+  return window.btoa(string)
+}
+
+function arrayBufferToString(arrayBuffer) {
   var array = new Uint8Array(arrayBuffer),
-    string = "",
-    i, n;
+      string = "",
+      i, n;
   for (i = 0, n = array.length; i < n; ++i) {
-    string += String.fromCharCode(array[i]);
+      string += String.fromCharCode(array[i])
   }
-  return window.btoa(string);
+  return string;
 }
 
 Response.prototype.base64EncodedString = function () {
@@ -422,18 +427,20 @@ Response.prototype.base64EncodedString = function () {
     return url;
   }
 
-function serializedBodyForRequest(request) {
-  var contentType = request.headers.get("content-type");
-  if (request.arrayBuffer) {
-    return request.arrayBuffer().then(function (arrayBuffer) {
-      return arrayBufferToBase64String(arrayBuffer);
-    });
-  } else {
-    return request.text().then(function (text) {
-      return contentType === "application/json" ? text : window.btoa(text);
-    });
-  }
-}
+  function serializedBodyForRequest(request) {
+    var contentType = request.headers.get("content-type"),
+        isContentTypeJSON = contentType === "application/json";
+    if (request.arrayBuffer) {
+        return request.arrayBuffer().then(function (arrayBuffer) {
+            return isContentTypeJSON ? arrayBufferToString(arrayBuffer) : arrayBufferToBase64String(arrayBuffer);
+        });
+    } else {
+        return request.text().then(function (text) {
+            return isContentTypeJSON ? text : window.btoa(text)
+        })
+    }
+  } 
+   
   var originalFetch = window.fetch;
   window.fetch = function (requestOrURL, init) {
     var shouldSerializeBody = false,

@@ -47,11 +47,11 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
 }
 
 + (ServiceWorkerRequest *) requestWithDictionary: (NSDictionary *) requestDict {
-//    NSNumber *requestId = [NSNumber numberWithLongLong:atomic_fetch_add_explicit(&requestCount, 1, memory_order_relaxed)];
+    NSNumber *requestId = [NSNumber numberWithLongLong:atomic_fetch_add_explicit(&requestCount, 1, memory_order_relaxed)];
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest new];
-//    swRequest.requestId = requestId;
+    swRequest.requestId = requestId;
     swRequest.originalRequestDict = requestDict;
-//    [[ServiceWorkerRequest requestsById] setValue:reswRequest forKey: [requestId stringValue]];
+    [[ServiceWorkerRequest requestsById] setValue:swRequest forKey: [requestId stringValue]];
     return swRequest;
 }
 
@@ -130,14 +130,14 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
 
 
 NSNumber* _internalIsBodyBase64Encoded;
-- (Boolean) isBodyBase64Encoded {
+- (Boolean *) isBodyBase64Encoded {
     if  (_internalIsBodyBase64Encoded == nil) {
         _internalIsBodyBase64Encoded = @1;
     }
-    return [_internalIsBodyBase64Encoded isEqualToNumber: @1];
+    return (Boolean *)[_internalIsBodyBase64Encoded isEqualToNumber: @1];
 }
 
-- (void) setIsBodyBase64Encoded: (Boolean) isEncoded {
+- (void) setIsBodyBase64Encoded: (Boolean *) isEncoded {
     _internalIsBodyBase64Encoded = isEncoded ? @1 : @0;
 }
 
