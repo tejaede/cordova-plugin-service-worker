@@ -139,7 +139,7 @@ NSSet *_urlsToDebug;
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithId: (NSNumber*)requestId];
     #ifdef DEBUG_SCHEME_HANDLER
         if ([self shouldDebugURL: [[swRequest outgoingRequest] URL]]) {
-            NSLog(@"sendRequestWithId - %@ %@ %@", (_queueHandler ? @"MAIN" : @"SW"), [[swRequest outgoingRequest] HTTPMethod], [[[swRequest outgoingRequest] URL] absoluteString]);
+            NSLog(@"sendRequestWithId - %@ %@ %@ %@", requestId, (_queueHandler ? @"MAIN" : @"SW"), [[swRequest outgoingRequest] HTTPMethod], [[[swRequest outgoingRequest] URL] absoluteString]);
         }
     #endif
     

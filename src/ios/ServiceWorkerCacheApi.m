@@ -169,8 +169,6 @@ NSSet *_urlsToDebug;
 - (NSSet *) _urlsToDebug {
     if (_urlsToDebug == nil) {
         _urlsToDebug = [[NSSet alloc] initWithArray:@[
-            @"country_srv/v1/timeZones",
-            @"command/rest/languages"
         ]];
     }
     return _urlsToDebug;
