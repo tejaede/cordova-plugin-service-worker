@@ -368,8 +368,12 @@ Response.createResponseForServiceWorkerResponse = function (serviceWorkerRespons
     body;
   if (serviceWorkerResponse) {
     isEncoded = serviceWorkerResponse.isEncoded !== undefined ? parseInt(serviceWorkerResponse.isEncoded) : !serviceWorkerResponse.url.endsWith(".js");
-      
-    body = isEncoded ? base64ToArrayBuffer(serviceWorkerResponse.body) : serviceWorkerResponse.body;
+      try {
+          body = isEncoded ? base64ToArrayBuffer(serviceWorkerResponse.body) : serviceWorkerResponse.body;
+      } catch (e) {
+        console.error("Failed to decode body for (" + serviceWorkerResponse.url + ")", e);
+      }
+    
     response = new Response(body, {
       status: serviceWorkerResponse.status,
       headers: serviceWorkerResponse.headers
