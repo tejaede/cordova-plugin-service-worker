@@ -348,6 +348,16 @@ Response.create = function (body, url, status, headers) {
 };
 
 
+function base64ToArrayBuffer(base64) {
+    var binary_string = window.atob(base64);
+    var len = binary_string.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
 /****
  * Creates a native JS response for a dictionary generated 
  * by objective c ServiceWorkerResponse#toDictionary
@@ -358,7 +368,8 @@ Response.createResponseForServiceWorkerResponse = function (serviceWorkerRespons
     body;
   if (serviceWorkerResponse) {
     isEncoded = serviceWorkerResponse.isEncoded !== undefined ? parseInt(serviceWorkerResponse.isEncoded) : !serviceWorkerResponse.url.endsWith(".js");
-    body = isEncoded ? window.atob(serviceWorkerResponse.body) : serviceWorkerResponse.body;
+      
+    body = isEncoded ? base64ToArrayBuffer(serviceWorkerResponse.body) : serviceWorkerResponse.body;
     response = new Response(body, {
       status: serviceWorkerResponse.status,
       headers: serviceWorkerResponse.headers

@@ -190,13 +190,12 @@ MimeType *_mimeType;
         return nil;
     } else {
         NSString *encodedBody;
-        NSURL *aUrl = [NSURL URLWithString:[self url]];
         BOOL isPlainText = [self isBodyPlainText];
         if (isPlainText) {
             encodedBody = [[NSString alloc] initWithData:self.body encoding:NSUTF8StringEncoding];
         }
         if (encodedBody == nil) {
-            encodedBody = [self.body base64EncodedStringWithOptions: 0];
+            encodedBody = [self.body base64EncodedStringWithOptions: NSDataBase64Encoding64CharacterLineLength];
             isPlainText = false;
         }
         if (encodedBody == nil) {
