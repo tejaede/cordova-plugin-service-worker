@@ -474,11 +474,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
         #endif
         NSURLSession *session = [NSURLSession sharedSession];
         NSURLSessionDataTask *dataTask = [session dataTaskWithRequest:request completionHandler: ^(NSData *data, NSURLResponse *response, NSError *error) {
-            #ifdef DEBUG_SCHEME_HANDLER
-                if ([self shouldDebugURL: url]) {
-                    NSLog(@"handleTrueFetchScriptMessage DONE %@", [url absoluteString]);
-                }
-            #endif
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             ServiceWorkerResponse *swResponse = [ServiceWorkerResponse responseWithHTTPResponse:httpResponse andBody:data];
             if (error != nil) {
