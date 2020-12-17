@@ -195,7 +195,7 @@ MimeType *_mimeType;
             encodedBody = [[NSString alloc] initWithData:self.body encoding:NSUTF8StringEncoding];
         }
         if (encodedBody == nil) {
-            encodedBody = [self.body base64EncodedStringWithOptions: NSDataBase64Encoding64CharacterLineLength];
+            encodedBody = [self.body base64EncodedStringWithOptions: 0];
             isPlainText = false;
         }
         if (encodedBody == nil) {
