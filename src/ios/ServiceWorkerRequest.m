@@ -28,6 +28,10 @@
 static atomic_int requestCount = 0;
 static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
 
+NSString * const CONTENT_TYPE_HEADER_KEY = @"content-type";
+NSString * const CONTENT_TYPE_JSON = @"application/json";
+NSString * const CONTENT_TYPE_FORM_DATA = @"multipart/form-data";
+
 + (NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> *) requestsById {
     if (_requestsById == nil) {
         _requestsById = [[NSMutableDictionary alloc] init];
@@ -104,16 +108,11 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
             }
             [_outgoingRequest setURL:outgoingURL];
             if ([[_outgoingRequest HTTPMethod] isEqualToString: @"POST"]) {
-                NSString * contentType = [_outgoingRequest valueForHTTPHeaderField:@"content-type"];
-                NSData *body = [_schemedRequest HTTPBody];
-                if (![self isBodyBase64Encoded]) {
-                    [_outgoingRequest setHTTPBody:body];
-                } else if (![contentType containsString:@"multipart/form-data"]) {
-                    NSData *decodedBody = [[NSData alloc] initWithBase64EncodedData:body options:NSDataBase64DecodingIgnoreUnknownCharacters];
+                NSString * contentType = [_outgoingRequest valueForHTTPHeaderField: CONTENT_TYPE_HEADER_KEY];
+                if ([self isBodyBase64EncodedForContentType: contentType]) {
+                    NSData *decodedBody = [[NSData alloc] initWithBase64EncodedData:[_schemedRequest HTTPBody] options:NSDataBase64DecodingIgnoreUnknownCharacters];
                     if (decodedBody) {
                         [_outgoingRequest setHTTPBody:decodedBody];
-                    } else {
-                        [_outgoingRequest setHTTPBody:body];
                     }
                 }
             }
@@ -129,19 +128,9 @@ static NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> * _requestsById;
 }
 
 
-NSNumber* _internalIsBodyBase64Encoded;
-- (Boolean *) isBodyBase64Encoded {
-    if  (_internalIsBodyBase64Encoded == nil) {
-        _internalIsBodyBase64Encoded = @1;
-    }
-    return (Boolean *)[_internalIsBodyBase64Encoded isEqualToNumber: @1];
+- (Boolean) isBodyBase64EncodedForContentType: (NSString *) contentType {
+    return !([contentType isEqualToString: CONTENT_TYPE_JSON] || [contentType containsString: CONTENT_TYPE_FORM_DATA]);
 }
-
-- (void) setIsBodyBase64Encoded: (Boolean *) isEncoded {
-    _internalIsBodyBase64Encoded = isEncoded ? @1 : @0;
-}
-
-
 
 - (NSMutableURLRequest *) schemedRequest {
     NSURL *schemedURL;
@@ -176,7 +165,7 @@ NSNumber* _internalIsBodyBase64Encoded;
     
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setTimeoutInterval:60];
-    NSString *contentType = [headers valueForKey:@"content-type"];
+    NSString *contentType = [headers valueForKey:CONTENT_TYPE_HEADER_KEY];
     NSString *boundary;
     NSData *httpBody;
     if ([body isKindOfClass:[NSDictionary class]]) {
@@ -187,12 +176,11 @@ NSNumber* _internalIsBodyBase64Encoded;
             contentType = [NSString stringWithFormat: @"%@; boundary=%@;", contentType, boundary];
         }
         httpBody = [self makeTrueFetchHTTPRequestMultipartBody: (NSDictionary *) body boundary: boundary];
-        [headers setValue:contentType forKey:@"content-type"];
-    } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0 && [contentType isEqualToString:@"application/json"]) {
-        httpBody = [(NSString *)body dataUsingEncoding:NSUTF8StringEncoding];
-        self.isBodyBase64Encoded = NO;
-    } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0) {
+        [headers setValue:contentType forKey:CONTENT_TYPE_HEADER_KEY];
+    } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0 && [self isBodyBase64EncodedForContentType: contentType]) {
         httpBody = [[NSData alloc] initWithBase64EncodedString:(NSString*)body options:NSDataBase64DecodingIgnoreUnknownCharacters];
+    } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0) {
+        httpBody = [(NSString *)body dataUsingEncoding:NSUTF8StringEncoding];
     }
     [request setHTTPMethod:method];
     if (headers != nil) {

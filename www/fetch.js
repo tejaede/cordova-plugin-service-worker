@@ -222,13 +222,15 @@ if (typeof cordova === "undefined") { // SW-Only
   }
 
   handleTrueFetch = function (method, url, headers, body, resolve, reject) {
-    var message = {
-      method: method,
-      url: url,
-      headers: headers instanceof Headers ? mapHeadersToPOJO(headers) : headers,
-      body: body
-    };
-
+    var pojoHeaders = headers instanceof Headers ? mapHeadersToPOJO(headers) : headers,
+      message = {
+          method: method,
+          url: url,
+          headers: pojoHeaders,
+          body: body,
+          isBodyEncoded: pojoHeaders["content-type"] !== "application/json"
+        };
+    
     cordovaExec("trueFetch", message, function (response, error) {
 
       if (error) {
@@ -464,13 +466,13 @@ Response.prototype.base64EncodedString = function () {
     if (requestOrURL instanceof Request) {
       url = prepareURL(requestOrURL.url);
       options = requestOrURL;
-      isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData;
+      isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData || options.body && options.body instanceof FormData;
       if (isBodyNativeFormData) {
         options.headers.delete("content-type");
         options = {
           method: options.method,
           headers: options.headers,
-          body: options.nativeFormData,
+          body: options.nativeFormData || options.body,
           referrer: options.referrer,
           referrerPolicy: options.referrerPolicy,
           mode: options.mode,
