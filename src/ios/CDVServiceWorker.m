@@ -32,7 +32,11 @@
 
 NSString * const SERVICE_WORKER = @"serviceworker";
 NSString * const SERVICE_WORKER_SCOPE = @"serviceworkerscope";
-NSString * const SERVICE_WORKER_CACHE_CORDOVA_ASSETS = @"cachecordovaassets";
+NSString * const SERVICE_WORKER_KEY_SHELL = @"serviceworkershell";
+NSString * const SERVICE_WORKER_KEY_INTERNAL_CACHE_ENABLED = @"internalcacheenabled";
+NSString * const SERVICE_WORKER_KEY_APPLICATION_URL = @"remoteapplicationurl";
+NSString * const SERVICE_WORKER_KEY_URL_SCHEME = @"serviceworkerurlscheme";
+
 NSString * const SERVICE_WORKER_ACTIVATED = @"ServiceWorkerActivated";
 NSString * const SERVICE_WORKER_INSTALLED = @"ServiceWorkerInstalled";
 NSString * const SERVICE_WORKER_SCRIPT_CHECKSUM = @"ServiceWorkerScriptChecksum";
@@ -45,6 +49,7 @@ NSString * const REGISTRATION_KEY_REGISTERING_SCRIPT_URL = @"registeringScriptUR
 NSString * const REGISTRATION_KEY_SCOPE = @"scope";
 NSString * const REGISTRATION_KEY_WAITING = @"waiting";
 
+NSString * const SERVICE_WORKER_KEY_CLIENT_URL = @"clientURL";
 NSString * const SERVICE_WORKER_KEY_SCRIPT_URL = @"scriptURL";
 
 NSString * const DEFAULT_SERVICE_WORKER_SHELL = @"sw.html";
@@ -56,7 +61,7 @@ NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
 static bool isServiceWorkerActive = YES;
 
 
-bool AUTO_CACHE_ENABLED = YES;
+
 
 @implementation CDVServiceWorker
 
@@ -75,6 +80,9 @@ CDVSWURLSchemeHandler *mainUrlSchemeHandler;
 NSURL *_clientUrl = nil;
 NSString *swShellFileName = nil;
 NSString *swClientApplicationUrl = nil;
+NSString *swClientApplicationVersion = nil;
+
+bool internalCacheEnabled = NO;
 
 NSSet *_urlsToDebug;
 - (NSSet *) _urlsToDebug {
@@ -129,18 +137,21 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     CDVViewController *vc = (CDVViewController *)[self viewController];
     NSMutableDictionary *settings = [vc settings];
     
-    NSString *configuredURLScheme =  [settings objectForKey:@"serviceworkerurlscheme"];
+    NSString *configuredURLScheme =  [settings objectForKey:SERVICE_WORKER_KEY_URL_SCHEME];
     _swUrlScheme = configuredURLScheme != nil ? configuredURLScheme : SERVICE_WORKER_DEFAULT_URL_SCHEME;
     
-    NSString *applicationURL =  [settings objectForKey:@"remoteapplicationurl"];
+    NSString *applicationURL =  [settings objectForKey:SERVICE_WORKER_KEY_APPLICATION_URL];
     applicationURL = [applicationURL stringByReplacingOccurrencesOfString:@"https" withString: _swUrlScheme];
     if ([applicationURL hasSuffix: @"/"]) {
         applicationURL = [applicationURL substringToIndex: [applicationURL length] - 1];
     }
     swClientApplicationUrl = applicationURL;
+    swClientApplicationVersion = [applicationURL stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
     
-    NSString *serviceWorkerShell =  [settings objectForKey:@"serviceworkershell"];
+    NSString *serviceWorkerShell =  [settings objectForKey:SERVICE_WORKER_KEY_SHELL];
     swShellFileName = serviceWorkerShell != nil ? serviceWorkerShell : DEFAULT_SERVICE_WORKER_SHELL;
+    
+    internalCacheEnabled = ![[[settings objectForKey: SERVICE_WORKER_KEY_INTERNAL_CACHE_ENABLED] lowercaseString] isEqualToString: @"false"];
 }
 
 - (void)pluginInitialize
@@ -157,7 +168,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     mainUrlSchemeHandler.scheme = _swUrlScheme;
     
 
-
     [self clearBrowserCache];
     [self createNewWorkerWebView];
 }
@@ -165,7 +175,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 -(void) createNewWorkerWebView {
 
     // Initialize CoreData for the Cache API.
-    self.cacheApi = [[ServiceWorkerCacheApi alloc] initWithScope:@"/" cacheCordovaAssets:false];
+    self.cacheApi = [[ServiceWorkerCacheApi alloc] initWithScope:@"/" internalCacheEnabled: internalCacheEnabled];
     [self.cacheApi initializeStorage];
     
 
@@ -438,7 +448,7 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     // does not have a chance to handle the request. The below
     // accounts for that by checking the cache.
     ServiceWorkerResponse *response;
-    if (AUTO_CACHE_ENABLED) {
+    if (internalCacheEnabled) {
         response = [[self cacheApi] matchRequest:request inCache:nil];
     }
     if (response != nil) {
@@ -450,11 +460,11 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     BOOL isScriptOnFileSystem = [self isURLAPrecachedJavascriptFile:url];
     BOOL isJavascriptDependency = [self isURLJavascriptDependency:url];
     // Specific to Contour Use Case
-    if (isScriptOnFileSystem && AUTO_CACHE_ENABLED) {
+    if (isScriptOnFileSystem && internalCacheEnabled) {
         response = [self loadURLFromFileSystem: url];
-    } else if (isImportScriptRequest && AUTO_CACHE_ENABLED) {
+    } else if (isImportScriptRequest && internalCacheEnabled) {
         response = [[self cacheApi] matchInternal:request];
-    } else if (isJavascriptDependency && AUTO_CACHE_ENABLED) {
+    } else if (isJavascriptDependency && internalCacheEnabled) {
         response = [[self cacheApi] matchInternal:request];
     }
 
@@ -486,7 +496,9 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
                         NSLog(@"Cache Import Scripts: %@", url);
                     }
                     #endif
-                    [[self cacheApi] putInternal:request swResponse:swResponse];
+                    if (internalCacheEnabled) {
+                        [[self cacheApi] putInternal:request swResponse:swResponse];
+                    }
                 }
                 #ifdef DEBUG_SCHEME_HANDLER
                     if ([self shouldDebugURL: url]) {
@@ -943,6 +955,8 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     [webView reload];
 }
 
+
+
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
 {
     NSLog(@"Worker WebView didFinishNavigation - %@", [[webView URL] absoluteString]);
@@ -957,17 +971,19 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
 
 - (void) createRegistrationWithExistingScript {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    bool serviceWorkerInstalled = [defaults boolForKey:SERVICE_WORKER_INSTALLED];
-    bool serviceWorkerActivated = [defaults boolForKey:SERVICE_WORKER_ACTIVATED];
     NSString *serviceWorkerScriptURL = [defaults stringForKey:REGISTRATION_KEY_REGISTERING_SCRIPT_URL];
-    NSString *serviceWorkerScriptChecksum = [defaults stringForKey:SERVICE_WORKER_SCRIPT_CHECKSUM];
-    
     if (serviceWorkerScriptURL != nil) {
         NSURL *url = [NSURL URLWithString: serviceWorkerScriptURL];
         NSString *relativeURL = [[url pathComponents] lastObject];
-        NSString *clientURL = [serviceWorkerScriptURL stringByReplacingOccurrencesOfString:relativeURL withString:@""];
-        NSLog(@"Existing Service Worker Registration URL %@ %@ %@", serviceWorkerScriptURL, relativeURL, clientURL);
-        [self registerWithURL:relativeURL absoluteURL:serviceWorkerScriptURL andClientURL:clientURL handler:nil];
+        NSString *savedClientURL = [serviceWorkerScriptURL stringByReplacingOccurrencesOfString:relativeURL withString:@""];
+        NSString *currentClientURL = [[[_workerWebView URL] URLByDeletingLastPathComponent] absoluteString];
+        if ([savedClientURL isEqualToString: currentClientURL]) {
+//            NSLog(@"Existing Service Worker Registration URL %@ %@ %@", serviceWorkerScriptURL, relativeURL, currentClientURL);
+            NSLog(@"Initialize Cached Registration - \n   script: %@\n   client: %@", serviceWorkerScriptURL, currentClientURL);
+            [self registerWithURL:relativeURL absoluteURL:serviceWorkerScriptURL andClientURL:currentClientURL handler:nil];
+        } else {
+            NSLog(@"Initialize Cached Registration - Cached SW client URL does not match current client URL.\n   cached: %@\n   current: %@", savedClientURL, currentClientURL);
+        }
     }
 }
 
@@ -1022,7 +1038,7 @@ NSSet *autoCacheFileNames;
     }
     
     #endif
-    if (AUTO_CACHE_ENABLED) {
+    if (internalCacheEnabled) {
         response = [[self cacheApi] matchInternal:request];
         #ifdef DEBUG_CACHE
         if ([self shouldDebugURL:[request URL]]) {

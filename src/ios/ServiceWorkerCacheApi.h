@@ -41,7 +41,7 @@ extern NSString * const SERVICE_WORKER;
 
 + (id)sharedCacheApi;
 
--(id)initWithScope:(NSString *)scope cacheCordovaAssets:(BOOL)cacheCordovaAssets;
+-(id)initWithScope:(NSString *)scope internalCacheEnabled:(BOOL)internalCacheEnabled;
 -(void)registerForJavascriptMessagesForWebView:(WKWebView *) webView;
 -(ServiceWorkerCacheStorage *)cacheStorageForScope:(NSURL *)scope;
 -(BOOL)initializeStorage;
@@ -53,7 +53,7 @@ extern NSString * const SERVICE_WORKER;
 - (void)putInternal:(NSURLRequest *)request swResponse: (ServiceWorkerResponse *) response;
 - (ServiceWorkerResponse *)matchInternal:(NSURLRequest *)request;
 @property (nonatomic, retain) NSMutableDictionary *cacheStorageMap;
-@property (nonatomic) BOOL cacheCordovaAssets;
+@property (nonatomic) BOOL internalCacheEnabled;
 @property (nonatomic, retain) NSString *absoluteScope;
 @end
 

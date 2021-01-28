@@ -24,8 +24,8 @@
 #import "ServiceWorkerResponse.h"
 #import <WebKit/WebKit.h>
 
-NSString * const CORDOVA_ASSETS_CACHE_NAME = @"CordovaAssets";
-NSString * const CORDOVA_ASSETS_VERSION_KEY = @"CordovaAssetsVersion";
+NSString * const INTERNAL_CACHE_NAME = @"__cordova_sw_internal__";
+NSString * const INTERNAL_CACHE_VERSION_KEY = @"InternalCacheVersion";
 
 static NSManagedObjectContext *moc;
 static NSString *rootPath_;
@@ -156,7 +156,7 @@ static NSString *rootPath_;
 @implementation ServiceWorkerCacheApi
 
 @synthesize cacheStorageMap = _cacheStorageMap;
-@synthesize cacheCordovaAssets = _cacheCordovaAssets;
+@synthesize internalCacheEnabled = _internalCacheEnabled;
 @synthesize absoluteScope = _absoluteScope;
 NSString *baseURL;
 
@@ -195,7 +195,7 @@ NSSet *_urlsToDebug;
         NSLog(@"ServiceWorkerCacheApi.pluginInitialize");
     #endif
     self.absoluteScope = @"/";
-    self.cacheCordovaAssets = false;
+    self.internalCacheEnabled = false;
     [self initializeStorage];
 }
 
@@ -219,12 +219,12 @@ NSSet *_urlsToDebug;
     if (self) {
         sharedInstance = self;
         self.absoluteScope = @"/";
-        self.cacheCordovaAssets = false;
+        self.internalCacheEnabled = false;
     }
     return self;
 }
 
--(id)initWithScope:(NSString *)scope cacheCordovaAssets:(BOOL)cacheCordovaAssets
+-(id)initWithScope:(NSString *)scope internalCacheEnabled:(BOOL)internalCacheEnabled
 {
     if (self = [super init]) {
         if (scope == nil) {
@@ -232,7 +232,7 @@ NSSet *_urlsToDebug;
         } else {
             self.absoluteScope = scope;
         }
-        self.cacheCordovaAssets = cacheCordovaAssets;
+        self.internalCacheEnabled = internalCacheEnabled;
     }
     return self;
 }
@@ -357,129 +357,72 @@ NSSet *_urlsToDebug;
 
 -(BOOL)initializeStorage
 {
+    
+    if (moc != nil) {
+        NSLog(@"Storage is already initialized");
+        return YES;
+    }
+    
     NSBundle* mainBundle = [NSBundle mainBundle];
     rootPath_ = [[NSURL fileURLWithPath:[mainBundle pathForResource:@"www" ofType:@"" inDirectory:@""]] absoluteString];
 
-    if (moc == nil) {
-        NSManagedObjectModel *model = [ServiceWorkerCacheApi createManagedObjectModel];
-        NSPersistentStoreCoordinator *psc = [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:model];
+    NSManagedObjectModel *model = [ServiceWorkerCacheApi createManagedObjectModel];
+    NSPersistentStoreCoordinator *psc = [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:model];
 
-        NSError *err;
-        NSFileManager *fm = [NSFileManager defaultManager];
-        NSURL *documentsDirectoryURL = [fm URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:NO error:&err];
-        NSURL *cacheDirectoryURL = [documentsDirectoryURL URLByAppendingPathComponent:@"CacheData"];
-        [fm createDirectoryAtURL:cacheDirectoryURL withIntermediateDirectories:YES attributes:nil error:&err];
-        NSURL *storeURL = [cacheDirectoryURL URLByAppendingPathComponent:@"swcache.db"];
+    NSError *err;
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSURL *documentsDirectoryURL = [fm URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:NO error:&err];
+    NSURL *cacheDirectoryURL = [documentsDirectoryURL URLByAppendingPathComponent:@"CacheData"];
+    [fm createDirectoryAtURL:cacheDirectoryURL withIntermediateDirectories:YES attributes:nil error:&err];
+    NSURL *storeURL = [cacheDirectoryURL URLByAppendingPathComponent:@"swcache.db"];
 
-        if (![fm fileExistsAtPath:[storeURL path]]) {
-            NSLog(@"Service Worker Cache doesn't exist.");
-            NSString *initialDataPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"CacheData"];
-            BOOL cacheDataIsDirectory;
-            if ([fm fileExistsAtPath:initialDataPath isDirectory:&cacheDataIsDirectory]) {
-                if (cacheDataIsDirectory) {
-                    NSURL *initialDataURL = [NSURL fileURLWithPath:initialDataPath isDirectory:YES];
-                    NSLog(@"Copying Initial Cache.");
-                    NSArray *fileURLs = [fm contentsOfDirectoryAtURL:initialDataURL includingPropertiesForKeys:nil options:0 error:&err];
-                    for (NSURL *fileURL in fileURLs) {
-                        [fm copyItemAtURL:fileURL toURL:cacheDirectoryURL error:&err];
-                    }
+    if (![fm fileExistsAtPath:[storeURL path]]) {
+        NSLog(@"Service Worker Cache doesn't exist.");
+        NSString *initialDataPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"CacheData"];
+        BOOL cacheDataIsDirectory;
+        if ([fm fileExistsAtPath:initialDataPath isDirectory:&cacheDataIsDirectory]) {
+            if (cacheDataIsDirectory) {
+                NSURL *initialDataURL = [NSURL fileURLWithPath:initialDataPath isDirectory:YES];
+                NSLog(@"Copying Initial Cache.");
+                NSArray *fileURLs = [fm contentsOfDirectoryAtURL:initialDataURL includingPropertiesForKeys:nil options:0 error:&err];
+                for (NSURL *fileURL in fileURLs) {
+                    [fm copyItemAtURL:fileURL toURL:cacheDirectoryURL error:&err];
                 }
             }
         }
+    }
 
-        NSLog(@"Using file %@ for service worker cache", [cacheDirectoryURL path]);
+    NSLog(@"Using file %@ for service worker cache", [cacheDirectoryURL path]);
+    err = nil;
+    [psc addPersistentStoreWithType:NSSQLiteStoreType configuration:nil URL:[NSURL URLWithString:@"swcache.db" relativeToURL:storeURL] options:nil error:&err];
+    if (err) {
+        // Try to delete the old store and try again
+        [fm removeItemAtURL:[NSURL URLWithString:@"swcache.db" relativeToURL:storeURL] error:&err];
+        [fm removeItemAtURL:[NSURL URLWithString:@"swcache.db-shm" relativeToURL:storeURL] error:&err];
+        [fm removeItemAtURL:[NSURL URLWithString:@"swcache.db-wal" relativeToURL:storeURL] error:&err];
         err = nil;
         [psc addPersistentStoreWithType:NSSQLiteStoreType configuration:nil URL:[NSURL URLWithString:@"swcache.db" relativeToURL:storeURL] options:nil error:&err];
         if (err) {
-            // Try to delete the old store and try again
-            [fm removeItemAtURL:[NSURL URLWithString:@"swcache.db" relativeToURL:storeURL] error:&err];
-            [fm removeItemAtURL:[NSURL URLWithString:@"swcache.db-shm" relativeToURL:storeURL] error:&err];
-            [fm removeItemAtURL:[NSURL URLWithString:@"swcache.db-wal" relativeToURL:storeURL] error:&err];
-            err = nil;
-            [psc addPersistentStoreWithType:NSSQLiteStoreType configuration:nil URL:[NSURL URLWithString:@"swcache.db" relativeToURL:storeURL] options:nil error:&err];
-            if (err) {
-                return NO;
-            }
-        }
-        moc = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
-        moc.persistentStoreCoordinator = psc;
-
-        // If this is the first run ever, or the app has been updated, populate the Cordova assets cache with assets from www/.
-        if (self.cacheCordovaAssets) {
-            NSString *cordovaAssetsVersion = [[NSUserDefaults standardUserDefaults] stringForKey:CORDOVA_ASSETS_VERSION_KEY];
-            NSString *currentAppVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
-            if (cordovaAssetsVersion == nil || ![cordovaAssetsVersion isEqualToString:currentAppVersion]) {
-                // Delete the existing cache (if it exists).
-                NSURL *scope = [NSURL URLWithString:self.absoluteScope];
-                ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
-                [cacheStorage deleteCacheWithName:CORDOVA_ASSETS_CACHE_NAME];
-
-                // Populate the cache.
-                [self populateCordovaAssetsCache];
-
-                // Store the app version.
-                [[NSUserDefaults standardUserDefaults] setObject:currentAppVersion forKey:CORDOVA_ASSETS_VERSION_KEY];
-            }
+            return NO;
         }
     }
+    moc = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
+    moc.persistentStoreCoordinator = psc;
+
+    // If this is the first run ever, or the app has been updated, populate the Cordova assets cache with assets from www/.
+    NSString *internalCacheVersion = [[NSUserDefaults standardUserDefaults] stringForKey:INTERNAL_CACHE_VERSION_KEY];
+    NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+    if (internalCacheVersion != nil && ![internalCacheVersion isEqualToString:currentVersion]) {
+        // Delete the existing cache (if it exists).
+        NSLog(@"Internal Cache - Delete existing (version: %@)", internalCacheVersion);
+        NSURL *scope = [NSURL URLWithString:self.absoluteScope];
+        ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
+        [cacheStorage deleteCacheWithName:INTERNAL_CACHE_NAME];
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:currentVersion forKey:INTERNAL_CACHE_VERSION_KEY];
+    NSLog(@"Internal Cache (version: %@)", currentVersion);
 
     return YES;
-}
-
--(void)populateCordovaAssetsCache
-{
-    NSFileManager *fileManager = [[NSFileManager alloc] init];
-    NSString *wwwDirectoryPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/www"];
-    NSURL *wwwDirectoryUrl = [NSURL fileURLWithPath:wwwDirectoryPath isDirectory:YES];
-    NSArray *keys = [NSArray arrayWithObject:NSURLIsDirectoryKey];
-
-    NSDirectoryEnumerator *enumerator = [fileManager
-        enumeratorAtURL:wwwDirectoryUrl
-        includingPropertiesForKeys:keys
-        options:0
-        errorHandler:^(NSURL *url, NSError *error) {
-            // Handle the error.
-            // Return YES if the enumeration should continue after the error.
-            return YES;
-        }
-    ];
-
-    // TODO: Prevent caching of sw_assets?
-    for (NSURL *url in enumerator) {
-        NSError *error;
-        NSNumber *isDirectory = nil;
-        if (![url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:&error]) {
-            // Handle error.
-        } else if (![isDirectory boolValue]) {
-            [self addToCordovaAssetsCache:url];
-        }
-    }
-}
-
-//TODO implement with URLSessionDataTask
--(void)addToCordovaAssetsCache:(NSURL *)url
-{
-    
-    // Create an NSURLRequest.
-//    NSMutableURLRequest *urlRequest = [NSMutableURLRequest requestWithURL:url];
-//
-//    // Ensure we're fetching purely.
-//    // Create a connection and send the request.
-//    FetchConnectionDelegate *delegate = [FetchConnectionDelegate new];
-//    delegate.resolve = ^(ServiceWorkerResponse *response) {
-//        // Get or create the specified cache.
-//        NSURL *scope = [NSURL URLWithString:self.absoluteScope];
-//        ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
-//        ServiceWorkerCache *cache = [cacheStorage cacheWithName:CORDOVA_ASSETS_CACHE_NAME];
-//
-//        // Create a URL request using a relative path.
-//        NSMutableURLRequest *shortUrlRequest = [self nativeRequestFromDictionary:@{@"url": [url absoluteString]}];
-//NSLog(@"Using short url: %@", shortUrlRequest.URL);
-//
-//        // Put the request and response in the cache.
-//        [cache putRequest:shortUrlRequest andResponse:response inContext:moc];
-//    };
-//    [NSURLConnection connectionWithRequest:urlRequest delegate:delegate];
 }
 
 -(ServiceWorkerCacheStorage *)cacheStorageForScope:(NSURL *)scope
@@ -776,7 +719,8 @@ WKWebView *_webView = nil;
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
 
-NSString *internalCacheName = @"__cordova_sw_internal__";
+
+
 - (void)putInternal:(NSURLRequest *)request response: (NSHTTPURLResponse *) response data: (NSData *) data {
     // Convert the response into a ServiceWorkerResponse.
     ServiceWorkerResponse *serviceWorkerResponse = [ServiceWorkerResponse responseWithHTTPResponse:response andBody: data];
@@ -784,10 +728,14 @@ NSString *internalCacheName = @"__cordova_sw_internal__";
 }
 
 - (ServiceWorkerResponse *)matchInternal:(NSURLRequest *)request {
-    NSURL *scope = [NSURL URLWithString:self.absoluteScope];
-    ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
-    ServiceWorkerCache *cache = [cacheStorage cacheWithName: internalCacheName];
-    return [self matchRequest:request inCache: cache];
+    if (_internalCacheEnabled) {
+        NSURL *scope = [NSURL URLWithString:self.absoluteScope];
+        ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
+        ServiceWorkerCache *cache = [cacheStorage cacheWithName: INTERNAL_CACHE_NAME];
+        return [self matchRequest:request inCache: cache];
+    } else {
+        return nil;
+    }
 }
 
 - (ServiceWorkerResponse *)matchRequest:(NSURLRequest *)request inCacheWithName: (NSString *) cacheName {
@@ -805,15 +753,17 @@ NSString *internalCacheName = @"__cordova_sw_internal__";
 }
 
 - (void)putInternal:(NSURLRequest *)request swResponse: (ServiceWorkerResponse *) response {
-    NSURL *scope = [NSURL URLWithString:self.absoluteScope];
-    ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
-    ServiceWorkerCache *cache = [cacheStorage cacheWithName: internalCacheName];
-    
-    // Convert the response into a ServiceWorkerResponse.
-    NSError *error;
-    [cache putRequest:request andResponse:response inContext:moc];
-    if (error != nil) {
-        NSLog(@"Failed to put internal asset in cache - %@ %@", [[request URL] absoluteString], [error localizedDescription]);
+    if (_internalCacheEnabled) {
+        NSURL *scope = [NSURL URLWithString:self.absoluteScope];
+        ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
+        ServiceWorkerCache *cache = [cacheStorage cacheWithName: INTERNAL_CACHE_NAME];
+        
+        // Convert the response into a ServiceWorkerResponse.
+        NSError *error;
+        [cache putRequest:request andResponse:response inContext:moc];
+        if (error != nil) {
+            NSLog(@"Failed to put internal asset in cache - %@ %@", [[request URL] absoluteString], [error localizedDescription]);
+        }
     }
 }
 
