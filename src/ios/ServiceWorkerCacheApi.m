@@ -359,7 +359,7 @@ NSSet *_urlsToDebug;
 {
     
     if (moc != nil) {
-        NSLog(@"Storage is already initialized");
+//        NSLog(@"Storage is already initialized");
         return YES;
     }
     

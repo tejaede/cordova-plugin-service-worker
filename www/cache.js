@@ -290,5 +290,16 @@ if (typeof cordova !== 'undefined') {
 }
 
 try {
-  window.caches = new CacheStorage();
-} catch (e) {}
+  window.contourCaches = new CacheStorage();
+  Object.defineProperty(window, "caches", {
+      get: function () {
+          return window.contourCaches;
+      }
+  });
+  if (window.contourCaches === window.caches) {
+      console.error("Failed to overwrite native CacheStorage");
+  }
+} catch (e) {
+  console.error("Failed to overwrite native CacheStorage");
+  console.error(e);
+}

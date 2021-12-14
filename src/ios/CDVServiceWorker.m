@@ -82,7 +82,7 @@ NSString *swShellFileName = nil;
 NSString *swClientApplicationUrl = nil;
 NSString *swClientApplicationVersion = nil;
 
-bool internalCacheEnabled = NO;
+bool internalCacheEnabled = YES;
 
 NSSet *_urlsToDebug;
 - (NSSet *) _urlsToDebug {
@@ -459,8 +459,12 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     BOOL isImportScriptRequest = [request valueForHTTPHeaderField:@"x-import-scripts"] != nil;
     BOOL isScriptOnFileSystem = [self isURLAPrecachedJavascriptFile:url];
     BOOL isJavascriptDependency = [self isURLJavascriptDependency:url];
-    // Specific to Contour Use Case
-    if (isScriptOnFileSystem && internalCacheEnabled) {
+    
+    if ([[url path] containsString:@"cache-worker.js"]) {
+        response = [self loadURLFromFileSystem: url];
+    }// Specific to Contour Use Case
+    else
+        if (isScriptOnFileSystem && internalCacheEnabled) {
         response = [self loadURLFromFileSystem: url];
     } else if (isImportScriptRequest && internalCacheEnabled) {
         response = [[self cacheApi] matchInternal:request];
@@ -1005,6 +1009,7 @@ NSSet *autoCacheFileNames;
     
     // worker bootstrap.js, index.native.html, and alt-host.json are specific to contour
     if (([response statusCode] == 200) && [self shouldAutoCacheRequest:request]) {
+        NSLog(@"[CDVServiceWorker] Auto-cache Response %@", [[request URL] absoluteString]);
         [[self cacheApi] putInternal:request response:response data:data];
     }
 }
