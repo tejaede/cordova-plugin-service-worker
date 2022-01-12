@@ -26,7 +26,6 @@
 #import "ServiceWorkerRequest.h"
 #import "CDVBackgroundSync.h"
 #import "SWScriptTemplate.h"
-#import "CDVWKWebViewEngine.h"
 #import "CDVSWURLSchemeHandler.h"
 
 
@@ -1148,4 +1147,3 @@ NSSet *autoCacheFileNames;
 }
 
 @end
-

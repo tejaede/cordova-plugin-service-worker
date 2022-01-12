@@ -44,7 +44,6 @@ extern NSString * const REGISTRATION_KEY_WAITING;
 
 extern NSString * const SERVICE_WORKER_KEY_SCRIPT_URL;
 
-//@interface CDVServiceWorker : CDVPlugin <UIWebViewDelegate> {}
 @interface CDVServiceWorker : CDVPlugin <WKUIDelegate, CDVJavaScriptEvaluator, WKNavigationDelegate, WKScriptMessageHandler, CDVSWRequestQueueProtocol, CDVSWURLSchemeHandlerDelegate> {}
 
 @property (nonatomic, retain) CDVBackgroundSync *backgroundSync;

@@ -93,6 +93,7 @@ CacheStorage = function () {
   // TODO: Consider JS cache name caching solutions, such as a list of cache names and a flag for whether we have fetched from CoreData yet.
   // Right now, all calls except `open` go to native.
   this.cachesByName = {};
+  this.isPolyfill = true;
   return this;
 };
 
@@ -217,10 +218,6 @@ if (typeof cordova !== 'undefined') {
   module.exports = new CacheStorage();
 } else {
 
-  try {
-    window.caches = new CacheStorage();
-  } catch (e) {}
-
   cachesHas = function (cacheName, resolve, reject) {
     var message = {
       cacheName: cacheName
@@ -296,8 +293,8 @@ try {
           return window.contourCaches;
       }
   });
-  if (window.contourCaches === window.caches) {
-      console.error("Failed to overwrite native CacheStorage");
+  if (!window.caches.isPolyfill) {
+      console.error("Failed to overwrite native CacheStorage, but no error was thrown");
   }
 } catch (e) {
   console.error("Failed to overwrite native CacheStorage");

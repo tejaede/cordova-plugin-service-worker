@@ -5,12 +5,12 @@
 //  Created by Thomas Jaede on 5/5/20.
 //
 
-#import "CDVWKWebViewEngine.h"
+#import "CDVWebViewEngine.h"
 
 #ifndef CDVSWWKWebViewEngine_h
 #define CDVSWWKWebViewEngine_h
 
-@interface CDVSWWKWebViewEngine : CDVWKWebViewEngine <WKNavigationDelegate>
+@interface CDVSWWKWebViewEngine : CDVWebViewEngine <WKNavigationDelegate>
 
 @property (nonatomic, retain) NSString *swUrlScheme;
 

@@ -5,7 +5,7 @@
 //  Created by Thomas Jaede on 4/22/20.
 //
 
-#import "CDVWKProcessPoolFactory.h"
+#import "CDVWebViewProcessPoolFactory.h"
 #import "CDVSWWKWebViewEngine.h"
 #import <Cordova/NSDictionary+CordovaPreferences.h>
 #import "CDVSWURLSchemeHandler.h"
@@ -13,10 +13,10 @@
 
 
 //TODO Merge with same two properties in CDVServiceWorker.m
-NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
+NSString * const SW_DEFAULT_URL_SCHEME = @"cordova-sw";
 
 
-@implementation CDVSWWKWebViewEngine : CDVWKWebViewEngine
+@implementation CDVSWWKWebViewEngine : CDVWebViewEngine
 
 @synthesize swUrlScheme = _swUrlScheme;
 
@@ -25,7 +25,7 @@ NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
     CDVViewController *vc = (CDVViewController *)[self viewController];
     NSMutableDictionary *settings = [vc settings];
     NSString *configuredURLScheme =  [settings objectForKey:@"serviceworkerurlscheme"];
-    _swUrlScheme = configuredURLScheme != nil ? configuredURLScheme : SERVICE_WORKER_DEFAULT_URL_SCHEME;
+    _swUrlScheme = configuredURLScheme != nil ? configuredURLScheme : SW_DEFAULT_URL_SCHEME;
     WKWebView* wkWebView = (WKWebView*)self.engineWebView;
     [wkWebView setNavigationDelegate: self];
     [super pluginInitialize];
@@ -33,8 +33,8 @@ NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
 
 - (WKWebViewConfiguration*) createConfigurationFromSettings:(NSDictionary*)settings
 {
-    WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
-    configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
+    WKWebViewConfiguration* configuration = [super createConfigurationFromSettings: settings];
+    configuration.processPool = [[CDVWebViewProcessPoolFactory sharedFactory] sharedProcessPool];
     CDVSWURLSchemeHandler *swUrlHandler = [[CDVSWURLSchemeHandler alloc] init];    
     if (@available(iOS 11.0, *)) {
         [configuration setURLSchemeHandler:swUrlHandler forURLScheme: _swUrlScheme];
@@ -57,6 +57,11 @@ NSString * const SERVICE_WORKER_DEFAULT_URL_SCHEME = @"cordova-sw";
     NSURLCredential * credential = [[NSURLCredential alloc] initWithTrust:[challenge protectionSpace].serverTrust];
 //    NSLog(@"SWWKWebViewEngine.didReceiveAuthenticationChallenge");
     completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
+}
+
+- (void) webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+    [super webView:webView didFinishNavigation:navigation];
+    NSLog(@"Finished navigation");
 }
 
 @end
