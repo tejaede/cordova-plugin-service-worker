@@ -53,19 +53,12 @@
     [fetchRequest setEntity:entity];
 
     NSPredicate *predicate;
-    
-    if (@available(iOS 13, *)) {
-        if (includesQuery) {
-            predicate = [NSPredicate predicateWithFormat:@"(cache == %@) AND (url == %@) AND (query == %@)", self, [self urlWithoutQueryForUrl:url], url.query];
-        } else {
-            predicate = [NSPredicate predicateWithFormat:@"(cache == %@) AND (url == %@)", self, [self urlWithoutQueryForUrl:url]];
-        }
+    if ([[[url absoluteURL] absoluteString] hasSuffix: @"configuration"]) {
+        predicate = [NSPredicate predicateWithFormat:@"url == %@", [self urlWithoutQueryForUrl:url]];
+    } else if (includesQuery) {
+        predicate = [NSPredicate predicateWithFormat:@"(cacheName == %@) AND (url == %@) AND (query == %@)", [self name], [self urlWithoutQueryForUrl:url], url.query];
     } else {
-        if (includesQuery) {
-            predicate = [NSPredicate predicateWithFormat:@"(cacheName == %@) AND (url == %@) AND (query == %@)", [self name], [self urlWithoutQueryForUrl:url], url.query];
-        } else {
-            predicate = [NSPredicate predicateWithFormat:@"(cacheName == %@) AND (url == %@)", [self name], [self urlWithoutQueryForUrl:url]];
-        }
+        predicate = [NSPredicate predicateWithFormat:@"(cacheName == %@) AND (url == %@)", [self name], [self urlWithoutQueryForUrl:url]];
     }
     
     
@@ -75,8 +68,7 @@
     NSArray *entries = [moc executeFetchRequest:fetchRequest error:&error];
     
     if (error != nil) {
-        NSLog(@"Failed to fetch entries for url %@ (%@) %@", isMainThread ? @"YES" : @"NO", [self name], url, [error localizedDescription]);
-//        NSLog(@"Failed to put request in cache (%@): %@ \n %@ \n %@ \n %@", self.name, [entry url], foundEntry ? @"YES" : @"NO", [err localizedDescription], [err description]);
+        NSLog(@"Failed to fetch entries for url %@ (%@) %@ %@", isMainThread ? @"YES" : @"NO", [self name], url, [error localizedDescription]);
     }
 
     
@@ -99,6 +91,11 @@
     
     ServiceWorkerCacheEntry *bestEntry = (ServiceWorkerCacheEntry *)candidateEntries[0];
     ServiceWorkerResponse *bestResponse = (ServiceWorkerResponse *)[NSKeyedUnarchiver unarchiveObjectWithData:bestEntry.response];
+//    NSError *unarchiveError;
+//    ServiceWorkerResponse *bestResponse = (ServiceWorkerResponse *)[NSKeyedUnarchiver unarchivedObjectOfClass:[ServiceWorkerResponse class] fromData: bestEntry.response error: &unarchiveError];
+//    if (unarchiveError != nil) {
+//        NSLog(@"Failed to decode response: %@ - %@", [[request URL] absoluteString], [unarchiveError description]);
+//    }
     return bestResponse;
 }
 

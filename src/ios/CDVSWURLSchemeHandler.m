@@ -110,7 +110,6 @@ NSSet *_urlsToDebug;
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             NSMutableDictionary *allHeaders = [NSMutableDictionary dictionaryWithDictionary: [httpResponse allHeaderFields]];
             [allHeaders setValue:[NSString stringWithFormat: @"cordova-main://%@", self.allowedOrigin] forKey:@"Access-Control-Allow-Origin"];
-//            [allHeaders setValue:[NSString stringWithFormat: @"contour-spec://%@", self.allowedOrigin] forKey:@"Access-Control-Allow-Origin"];
             [allHeaders setValue:@"true" forKey:@"Access-Control-Allow-Credentials"];
             
             #ifdef DEBUG_SCHEME_HANDLER
@@ -165,10 +164,14 @@ NSSet *_urlsToDebug;
             NSLog(@"CDVSWURLSchemeHandler Request Failed for url (%@) with error: %@", [[response URL] absoluteString], [error localizedDescription]);
             [task didFailWithError:error];
         } else {
-//            NSLog(@"CDVSWURLSchemeHandler stop task: %@", [[response URL] absoluteString]);
-            [task didReceiveResponse: response];
-            [task didReceiveData: data];
-            [task didFinish];
+            @try {
+                [task didReceiveResponse: response];
+                [task didReceiveData: data];
+                [task didFinish];
+            } @catch (NSException *e) {
+                NSLog(@"CDVSWURLSchemeHandler failed to finish task: %@ %@", [e reason], [[response URL] absoluteString]);
+            }
+            
         }
     }
 }
@@ -179,12 +182,33 @@ NSSet *_urlsToDebug;
     ServiceWorkerRequest *request = [ServiceWorkerRequest requestWithId:requestId];
     NSURLSessionTask *dataTask = [request dataTask];
     [ServiceWorkerRequest closeRequestWithId: requestId];
-    if (dataTask) {
-        NSLog(@"stopURLSchemeTask Cancel Data Task - %ld %@", (long)[dataTask state], [[[urlSchemeTask request] URL] absoluteString]);
-        [dataTask cancel];
+    if (dataTask != nil && [dataTask state] == NSURLSessionTaskStateRunning) {
+        @try {
+            NSLog(@"stopURLSchemeTask Cancel Data Task - %@", [[[urlSchemeTask request] URL] absoluteString]);
+            [dataTask cancel];
+        }
+        @catch (NSException *e) {
+            NSLog(@"Failed to Cancel Data Task - (%@) %@", [e reason], [[[urlSchemeTask request] URL] absoluteString]);
+        }
     } else {
-        NSLog(@"Declare request complete: %@", [[[urlSchemeTask request] URL] absoluteString]);
+        NSString *stateName = dataTask == nil ? @"NIL" : [self stringForDataTaskState:[dataTask state]];
+        NSLog(@"Declare request complete: (%@) %@", stateName, [[[urlSchemeTask request] URL] absoluteString]);
     }
+}
+
+- (NSString *) stringForDataTaskState: (NSURLSessionTaskState) state
+{
+    NSString *stateName;
+    if (state == NSURLSessionTaskStateRunning) {
+        stateName = @"Running";
+    } else if (state == NSURLSessionTaskStateSuspended) {
+        stateName = @"Suspended";
+    } else if (state == NSURLSessionTaskStateCanceling) {
+        stateName = @"Cancelling";
+    } else if (state == NSURLSessionTaskStateCompleted) {
+        stateName = @"Complete";
+    }
+    return stateName;
 }
 
 
