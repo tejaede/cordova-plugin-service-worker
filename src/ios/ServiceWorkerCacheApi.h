@@ -28,6 +28,7 @@ extern NSString * const SERVICE_WORKER;
 @interface ServiceWorkerCacheStorage : NSObject {}
 
 -(ServiceWorkerCache*)cacheWithName:(NSString *)cacheName;
+-(NSDictionary*)allCaches;
 -(BOOL)deleteCacheWithName:(NSString *)cacheName;
 -(BOOL)hasCacheWithName:(NSString *)cacheName;
 
@@ -48,7 +49,6 @@ extern NSString * const SERVICE_WORKER;
 -(void)putRequest:(NSURLRequest *) request andResponse:(ServiceWorkerResponse *)response inCache:(ServiceWorkerCache *)cache;
 -(ServiceWorkerResponse *) matchRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache;
 -(NSArray *) matchAllForRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache;
-
 - (void)putInternal:(NSURLRequest *)request response: (NSHTTPURLResponse *) response data: (NSData *) data;
 - (void)putInternal:(NSURLRequest *)request swResponse: (ServiceWorkerResponse *) response;
 - (ServiceWorkerResponse *)matchInternal:(NSURLRequest *)request;

@@ -91,6 +91,7 @@
     
     ServiceWorkerCacheEntry *bestEntry = (ServiceWorkerCacheEntry *)candidateEntries[0];
     ServiceWorkerResponse *bestResponse = (ServiceWorkerResponse *)[NSKeyedUnarchiver unarchiveObjectWithData:bestEntry.response];
+//    [TJ] TODO The call above is deprecated and should be converted to the below. Determine why the snippet below triggers an exception.
 //    NSError *unarchiveError;
 //    ServiceWorkerResponse *bestResponse = (ServiceWorkerResponse *)[NSKeyedUnarchiver unarchivedObjectOfClass:[ServiceWorkerResponse class] fromData: bestEntry.response error: &unarchiveError];
 //    if (unarchiveError != nil) {
@@ -157,9 +158,8 @@
     if (entries != nil && [entries count] >= 1) {
         entry = [entries objectAtIndex:0];
         foundEntry = true;
-//        NSLog(@"Cache.putRequest: overwrite existing entry %@", [request.URL absoluteString]);
+        NSLog(@"Cache.putRequest: overwrite existing entry %@", [request.URL absoluteString]);
     } else {
-//        NSLog(@"Cache.putRequest: insert new entry %@", [request.URL absoluteString]);
         entry = (ServiceWorkerCacheEntry *)[NSEntityDescription insertNewObjectForEntityForName:@"CacheEntry" inManagedObjectContext:moc];
         foundEntry = false;
     }
@@ -167,24 +167,20 @@
     entry.query = request.URL.query;
     entry.request = [NSKeyedArchiver archivedDataWithRootObject:request];
     entry.response = [NSKeyedArchiver archivedDataWithRootObject:response];
-    entry.cache = self;
-//    if (!(@available(iOS 13, *))) {
-        entry.cacheName = self.name;
-//    }
-    BOOL isMainThread = [NSThread isMainThread];
-    NSError *err;
-    
+        @try {
+            entry.cache = self;
+        //    if (!(@available(iOS 13, *))) {
+            entry.cacheName = self.name;
+        //    }
             NSError *error = nil;
             if (![moc save:&error]) {
-                NSLog(@"Failed to put request in cache (%@): %@ \n %@ \n %@ \n %@ \n %@ \n %@", entry.cacheName, self.name, [entry url], foundEntry ? @"YES" : @"NO", [error localizedDescription], [error description], [error localizedFailureReason]);
+                NSLog(@"Failed to put request in cache. Entry Cache Name/Self Name: %@/%@ \n URL: %@ \n Replace Current Entry: %@ \n Error Description: %@ \n %@ \n Reason: %@", entry.cacheName, self.name, [entry url], foundEntry ? @"YES" : @"NO", [error localizedDescription], [error description], [error localizedFailureReason]);
                 abort();
             }
-        }];
-//    [moc save:&err];
-//    if (err != nil) {
-//        NSLog(@"Failed to put request in cache (%@): %@ %@ \n %@ \n %@ \n %@", isMainThread ? @"Main: YES" : @"Main: NO", self.name, [entry url],  foundEntry ? @"Found: YES" : @"Found: NO", [err localizedDescription], [err description]);
-//        BOOL tmp = false;
-//    }
+        } @catch (NSException *e) {
+            NSLog(@"Exception thrown while puting request with URL %@ \n %@", [entry url], [e reason]);
+        }
+    }];
 }
 
 -(bool)deleteRequest:(NSURLRequest *)request fromContext:(NSManagedObjectContext *)moc

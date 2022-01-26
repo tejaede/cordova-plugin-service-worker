@@ -27,7 +27,7 @@
 NSString * const INTERNAL_CACHE_NAME = @"__cordova_sw_internal__";
 NSString * const INTERNAL_CACHE_VERSION_KEY = @"InternalCacheVersion";
 
-static NSManagedObjectContext *moc;
+static NSManagedObjectContext *mainMoc;
 static NSString *rootPath_;
 
 @implementation ServiceWorkerCacheStorage
@@ -70,31 +70,31 @@ static NSString *rootPath_;
     ServiceWorkerCache *cache = [self.caches objectForKey:cacheName];
     if (cache == nil) {
         // First try to get it from storage:
-        NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
-
-        NSEntityDescription *entity = [NSEntityDescription
-                                       entityForName:@"Cache" inManagedObjectContext:moc];
-        [fetchRequest setEntity:entity];
-
-        NSPredicate *predicate;
-
-        predicate = [NSPredicate predicateWithFormat:@"(name == %@)", cacheName];
-        [fetchRequest setPredicate:predicate];
-
-        NSError *error;
-        NSArray *entries = [moc executeFetchRequest:fetchRequest error:&error];
-        if (entries.count > 0) {
-        // TODO: HAVE NOT SEEN THIS BRANCH EXECUTE YET.
-            cache = entries[0];
-        } else if (create) {
+//        NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
+//
+//        NSEntityDescription *entity = [NSEntityDescription
+//                                       entityForName:@"Cache" inManagedObjectContext:mainMoc];
+//        [fetchRequest setEntity:entity];
+//
+//        NSPredicate *predicate;
+//
+//        predicate = [NSPredicate predicateWithFormat:@"(name == %@)", cacheName];
+//        [fetchRequest setPredicate:predicate];
+//
+//        NSError *error;
+//        NSArray *entries = [mainMoc executeFetchRequest:fetchRequest error:&error];
+        cache = [self fetchCacheWithNameFromStore:cacheName];
+        if (cache == nil && create) {
             // Not there; add it
             cache = (ServiceWorkerCache *)[NSEntityDescription insertNewObjectForEntityForName:@"Cache"
-                                                                        inManagedObjectContext:moc];
-            [self.caches setObject:cache forKey:cacheName];
+                                                                        inManagedObjectContext:mainMoc];
             cache.name = cacheName;
             NSError *err;
-            [moc save:&err];
+            [mainMoc save:&err];
         }
+    } else if (![[mainMoc registeredObjects] member: cache]) {
+        NSLog(@"ServiceWorkerCacheApi Refetch Cache With Name: %@", cacheName);
+        cache = [self fetchCacheWithNameFromStore:cacheName];
     }
     if (cache) {
         // Cache the cache
@@ -103,18 +103,42 @@ static NSString *rootPath_;
     return cache;
 }
 
+-(ServiceWorkerCache *)fetchCacheWithNameFromStore:(NSString *)cacheName
+{
+    // First try to get it from storage:
+    NSFetchRequest *fetchRequest = [[NSFetchRequest alloc] init];
+
+    NSEntityDescription *entity = [NSEntityDescription
+                                   entityForName:@"Cache" inManagedObjectContext:mainMoc];
+    [fetchRequest setEntity:entity];
+
+    NSPredicate *predicate;
+
+    predicate = [NSPredicate predicateWithFormat:@"(name == %@)", cacheName];
+    [fetchRequest setPredicate:predicate];
+
+    NSError *error;
+    NSArray *entries = [mainMoc executeFetchRequest:fetchRequest error:&error];
+    return entries.count > 0 ? entries[0] : nil;
+}
+
 -(ServiceWorkerCache *)cacheWithName:(NSString *)cacheName
 {
     return [self cacheWithName:cacheName create:YES];
+}
+
+-(NSDictionary *)allCaches
+{
+    return caches_;
 }
 
 -(BOOL)deleteCacheWithName:(NSString *)cacheName
 {
     ServiceWorkerCache *cache = [self cacheWithName:cacheName create:NO];
     if (cache != nil) {
-        [moc deleteObject:cache];
+        [mainMoc deleteObject:cache];
         NSError *err;
-        [moc save:&err];
+        [mainMoc save:&err];
         if (err == nil) {
             [self.caches removeObjectForKey:cacheName];
             return YES;
@@ -141,7 +165,7 @@ static NSString *rootPath_;
     NSDictionary *caches = [NSDictionary dictionaryWithDictionary:self.caches];
     for (NSString* cacheName in caches) {
         ServiceWorkerCache* cache = caches[cacheName];
-        response = [cache matchForRequest:request withOptions:options inContext:moc];
+        response = [cache matchForRequest:request withOptions:options inContext:mainMoc];
         if (response != nil) {
             break;
         }
@@ -358,7 +382,7 @@ NSSet *_urlsToDebug;
 -(BOOL)initializeStorage
 {
     
-    if (moc != nil) {
+    if (mainMoc != nil) {
 //        NSLog(@"Storage is already initialized");
         return YES;
     }
@@ -406,8 +430,8 @@ NSSet *_urlsToDebug;
             return NO;
         }
     }
-    moc = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
-    moc.persistentStoreCoordinator = psc;
+    mainMoc = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
+    mainMoc.persistentStoreCoordinator = psc;
 
     // If this is the first run ever, or the app has been updated, populate the Cordova assets cache with assets from www/.
     NSString *internalCacheVersion = [[NSUserDefaults standardUserDefaults] stringForKey:INTERNAL_CACHE_VERSION_KEY];
@@ -434,7 +458,7 @@ NSSet *_urlsToDebug;
     ServiceWorkerCacheStorage *cachesForScope = (ServiceWorkerCacheStorage *)[self.cacheStorageMap objectForKey:scope];
     if (cachesForScope == nil) {
         // TODO: Init this properly, using `initWithEntity:insertIntoManagedObjectContext:`.
-        cachesForScope = [[ServiceWorkerCacheStorage alloc] initWithContext:moc];
+        cachesForScope = [[ServiceWorkerCacheStorage alloc] initWithContext:mainMoc];
         [self.cacheStorageMap setObject:cachesForScope forKey:scope];
     }
     return cachesForScope;
@@ -514,7 +538,7 @@ NSSet *_urlsToDebug;
     if (cacheName == nil) {
         cachedResponse = [cacheStorage matchForRequest:urlRequest];
     } else {
-        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
+        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:mainMoc];
     }
 
     if (cachedResponse == nil) {
@@ -525,7 +549,7 @@ NSSet *_urlsToDebug;
             if (cacheName == nil) {
                 cachedResponse = [cacheStorage matchForRequest:urlRequest];
             } else {
-                cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
+                cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:mainMoc];
             }
             if (cachedResponse == nil) {
                 request[@"url"] = [NSString stringWithFormat: @"%@/index.native.html", urlString];
@@ -533,7 +557,7 @@ NSSet *_urlsToDebug;
                 if (cacheName == nil) {
                     cachedResponse = [cacheStorage matchForRequest:urlRequest];
                 } else {
-                    cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
+                    cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:mainMoc];
                 }
             }
             if (cachedResponse != nil) {
@@ -588,7 +612,7 @@ NSSet *_urlsToDebug;
     // Convert the response into a ServiceWorkerResponse.
     ServiceWorkerResponse *serviceWorkerResponse = [ServiceWorkerResponse responseFromJSValue:response];
     NSError *error;
-    [cache putRequest:urlRequest andResponse:serviceWorkerResponse inContext:moc error: &error];
+    [cache putRequest:urlRequest andResponse:serviceWorkerResponse inContext:mainMoc error: &error];
     [self sendResultToWorker: messageId parameters:nil withError: error];
 }
 
@@ -607,6 +631,7 @@ NSSet *_urlsToDebug;
 - (void)handleCacheKeysMessage: (WKScriptMessage *) message
 {
     NSDictionary *body = [message  body];
+
 }
 
 - (void)handleCachesHasScriptMessage: (WKScriptMessage *) message
@@ -629,6 +654,16 @@ NSSet *_urlsToDebug;
 - (void)handleCachesKeysMessage: (WKScriptMessage *) message
 {
     NSDictionary *body = [message  body];
+    NSNumber *messageId = [body valueForKey:@"messageId"];
+    NSURL *scope = [NSURL URLWithString:self.absoluteScope];
+    ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope: scope];
+    NSMutableDictionary* allCaches = [NSMutableDictionary dictionaryWithDictionary:[cacheStorage allCaches]];
+    if ([allCaches objectForKey:INTERNAL_CACHE_NAME] != nil) {
+        [allCaches removeObjectForKey:INTERNAL_CACHE_NAME];
+    }
+    NSArray* keys = [allCaches allKeys];
+    [self sendResultToWorker: messageId parameters: @{@"result": keys}];
+    
 }
 
 - (void) sendResultToWorker:(NSNumber*) messageId parameters:(NSDictionary *)parameters
@@ -707,7 +742,8 @@ WKWebView *_webView = nil;
     // Convert the response into a ServiceWorkerResponse.
     ServiceWorkerResponse *serviceWorkerResponse = [ServiceWorkerResponse responseFromJSValue:response];
     NSError *error;
-    [cache putRequest:urlRequest andResponse:serviceWorkerResponse inContext:moc error: &error];
+        [cache putRequest:urlRequest andResponse:serviceWorkerResponse inContext:mainMoc error: &error];
+    
     CDVPluginResult *result;
     if (error != nil) {
         NSLog(@"ServiceWorkerCacheApi.put failed: %@", [error description]);
@@ -744,7 +780,7 @@ WKWebView *_webView = nil;
     ServiceWorkerResponse *response;
     if (cacheName) {
         ServiceWorkerCache *cache = [cacheStorage cacheWithName: cacheName];
-        response = [cache matchForRequest:request inContext:moc];
+        response = [cache matchForRequest:request inContext:mainMoc];
     } else {
        response = [cacheStorage matchForRequest:request];
     }
@@ -760,7 +796,7 @@ WKWebView *_webView = nil;
         
         // Convert the response into a ServiceWorkerResponse.
         NSError *error;
-        [cache putRequest:request andResponse:response inContext:moc];
+        [cache putRequest:request andResponse:response inContext:mainMoc];
         if (error != nil) {
             NSLog(@"Failed to put internal asset in cache - %@ %@", [[request URL] absoluteString], [error localizedDescription]);
         }
@@ -788,7 +824,7 @@ WKWebView *_webView = nil;
         cachedResponse = [cacheStorage matchForRequest:urlRequest];
         
     } else {
-        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:moc];
+        cachedResponse = [[cacheStorage cacheWithName:cacheName] matchForRequest:urlRequest inContext:mainMoc];
     }
     
     CDVPluginResult *result;
@@ -857,13 +893,13 @@ WKWebView *_webView = nil;
 
 -(void) putRequest:(NSURLRequest *)request andResponse:(ServiceWorkerResponse *) response inCache:(ServiceWorkerCache *) cache
 {
-    [cache putRequest:request andResponse:response inContext:moc];
+    [cache putRequest:request andResponse:response inContext:mainMoc];
 }
 
 -(ServiceWorkerResponse *) matchRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache
 {
     if (cache != nil) {
-        return [cache matchForRequest:request inContext:moc];
+        return [cache matchForRequest:request inContext:mainMoc];
     } else {
         NSURL *scope = [NSURL URLWithString:self.absoluteScope];
         ServiceWorkerCacheStorage *cacheStorage = [self cacheStorageForScope:scope];
@@ -873,7 +909,7 @@ WKWebView *_webView = nil;
 
 -(NSArray *) matchAllForRequest:(NSURLRequest *)request inCache:(ServiceWorkerCache *) cache
 {
-    return [cache matchAllForRequest:request inContext:moc];
+    return [cache matchAllForRequest:request inContext:mainMoc];
 }
 
 

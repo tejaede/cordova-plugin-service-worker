@@ -208,6 +208,10 @@ if (typeof cordova !== 'undefined') {
   cacheDelete = function (cacheName, resolve, reject) {
     exec(resolve, reject, "ServiceWorkerCacheApi", "delete", [cacheName, request, options]);
   };
+    
+   cachesKeys = function (resolve, reject) {
+      exec(resolve, reject, "ServiceWorkerCacheApi", "keys");
+   };
   /**
    *  Overwrites window.caches.
    *  This is configured by in plugin.xml by
@@ -284,6 +288,19 @@ if (typeof cordova !== 'undefined') {
       }
     });
   };
+    
+    cachesKeys = function (resolve, reject) {
+        var message = {
+          options: {}
+        };
+        cordovaExec("cachesKeys", message, function (response, error) {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(response.result);
+          }
+        });
+    };
 }
 
 try {
