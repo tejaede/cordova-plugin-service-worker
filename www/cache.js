@@ -17,8 +17,8 @@ Cache.prototype.matchAll = function (request, options) {
 Cache.prototype.add = function (request) {
   // Fetch a response for the given request, then put the pair into the cache.
   var cache = this;
-  return fetch(request).then(function (response) {
-    return cache.put(request, response);
+    return fetch(request, {skipCache: true}).then(function (response) {
+        return cache.put(request, response);
   });
 };
 

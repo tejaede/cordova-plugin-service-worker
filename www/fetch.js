@@ -181,7 +181,7 @@ if (typeof cordova === "undefined") { // SW-Only
     return url;
   };
   // This function returns a promise with a response for fetching the given resource.
-  function fetch(input) {
+  function fetch(input, skipCache) {
     // Assume the passed in input is a resource URL string.
     // TODO: What should the default headers be?
     var inputIsRequest = input instanceof Request,
@@ -212,24 +212,26 @@ if (typeof cordova === "undefined") { // SW-Only
       if (inputIsRequest) {
         input.text().then(function (body) {
           // Call a native function to fetch the resource.
-          handleTrueFetch(method, url, headers, body, resolve, reject);
+          handleTrueFetch(method, url, headers, body, skipCache, resolve, reject);
         });
       } else {
         // Call a native function to fetch the resource.
-        handleTrueFetch(method, url, headers, body, resolve, reject);
+        handleTrueFetch(method, url, headers, body, skipCache, resolve, reject);
       }
     });
   }
 
-  handleTrueFetch = function (method, url, headers, body, resolve, reject) {
+  handleTrueFetch = function (method, url, headers, body, skipCache, resolve, reject) {
     var pojoHeaders = headers instanceof Headers ? mapHeadersToPOJO(headers) : headers,
       message = {
           method: method,
           url: url,
           headers: pojoHeaders,
           body: body,
-          isBodyEncoded: pojoHeaders["content-type"] !== "application/json"
+          isBodyEncoded: pojoHeaders["content-type"] !== "application/json",
+          skipCache: skipCache || false
         };
+
     
     cordovaExec("trueFetch", message, function (response, error) {
 
@@ -462,9 +464,12 @@ Response.prototype.base64EncodedString = function () {
   window.fetch = function (requestOrURL, init) {
     var shouldSerializeBody = false,
       isBodyNativeFormData = false,
+      skipCache = init && init.skipCache || false,
       url, options;
+      
     if (requestOrURL instanceof Request) {
       url = prepareURL(requestOrURL.url);
+      
       options = requestOrURL;
       isBodyNativeFormData = options.nativeFormData && options.nativeFormData instanceof FormData || options.body && options.body instanceof FormData;
       if (isBodyNativeFormData) {
@@ -506,10 +511,10 @@ Response.prototype.base64EncodedString = function () {
           keepalive: options.keepalive,
           signal: options.signal
         };
-        return originalFetch.call(window, new Request(url, options));
+        return originalFetch.call(window, new Request(url, options), skipCache);
       });
     } else {
-      return originalFetch.call(window, new Request(url, options));
+      return originalFetch.call(window, new Request(url, options), skipCache);
     }
   };
 

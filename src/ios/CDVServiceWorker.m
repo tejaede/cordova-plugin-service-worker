@@ -442,13 +442,26 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     ServiceWorkerRequest *swRequest = [ServiceWorkerRequest requestWithDictionary: body];
     NSURLRequest *request = [swRequest outgoingRequest];
     NSURL *url = [request URL];
+    BOOL skipCache = [[[swRequest originalRequestDict] objectForKey: @"skipCache"] boolValue];
+    BOOL skipCacheAlt = [[swRequest originalRequestDict] valueForKey: @"skipCache"] == YES;
+    BOOL canReadFromCache = internalCacheEnabled && !skipCache;
+    
+    if ([[request.URL absoluteString] containsString:@"/layer-service.js"]) {
+        NSLog(@"handleTrueFetchScriptMessage %@", [request.URL absoluteString]);
+    }
+    
+    if (skipCache) {
+        skipCacheAlt;
+        NSLog(@"handleTrueFetchScriptMessage SKIP CACHE %@", [url absoluteString]);
+    }
+    
     // fetch() sent directly from the service worker thread does not
     // trigger a fetch event. This means the cache logic in the worker
-    // does not have a chance to handle the request. The below
+    // does not have a chance to handle the request. The block below
     // accounts for that by checking the cache.
     ServiceWorkerResponse *response;
-    if (internalCacheEnabled) {
-        response = [[self cacheApi] matchRequest:request inCache:nil];
+    if (canReadFromCache) {
+        response = [[self cacheApi] matchRequest: request inCache: nil];
     }
     if (response != nil) {
         NSDictionary *responseDict = [response toDictionary];
@@ -462,12 +475,11 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     if ([[url path] containsString:@"cache-worker.js"]) {
         response = [self loadURLFromFileSystem: url];
     }// Specific to Contour Use Case
-    else
-        if (isScriptOnFileSystem && internalCacheEnabled) {
+    else if (isScriptOnFileSystem && canReadFromCache) {
         response = [self loadURLFromFileSystem: url];
-    } else if (isImportScriptRequest && internalCacheEnabled) {
+    } else if (isImportScriptRequest && canReadFromCache) {
         response = [[self cacheApi] matchInternal:request];
-    } else if (isJavascriptDependency && internalCacheEnabled) {
+    } else if (isJavascriptDependency && canReadFromCache) {
         response = [[self cacheApi] matchInternal:request];
     }
 
@@ -515,7 +527,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
         [dataTask resume];
     }
 }
-
 
 - (ServiceWorkerResponse *) loadURLFromFileSystem: (NSURL *) url {
     NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -1147,3 +1158,4 @@ NSSet *autoCacheFileNames;
 }
 
 @end
+
