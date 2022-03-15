@@ -304,15 +304,22 @@ if (typeof cordova !== 'undefined') {
 }
 
 try {
-  window.contourCaches = new CacheStorage();
-  Object.defineProperty(window, "caches", {
-      get: function () {
-          return window.contourCaches;
-      }
-  });
-  if (!window.caches.isPolyfill) {
-      console.error("Failed to overwrite native CacheStorage, but no error was thrown");
-  }
+if (!window.caches.isPolyfill) {
+    window.caches = new CacheStorage();
+ } else {
+     console.log("Successfully overwrote CacheStorage");
+ }
+ if (!window.caches.isPolyfill) {
+     window.contourCaches = new CacheStorage();
+     Object.defineProperty(window, "caches", {
+         get: function () {
+             return window.contourCaches
+         }
+     })
+ }
+ if (!window.caches.isPolyfill) {
+     console.error("Failed to overwrite native CacheStorage")
+ }
 } catch (e) {
   console.error("Failed to overwrite native CacheStorage");
   console.error(e);
