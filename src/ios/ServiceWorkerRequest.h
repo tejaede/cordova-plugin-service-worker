@@ -41,5 +41,6 @@
 @property (nonatomic, retain) NSURLSessionDataTask *dataTask;
 
 @property BOOL isClosed;
+@property BOOL isBodyDecoded;
  
 @end

@@ -32,6 +32,7 @@ NSString * const CONTENT_TYPE_HEADER_KEY = @"content-type";
 NSString * const CONTENT_TYPE_JSON = @"application/json";
 NSString * const CONTENT_TYPE_FORM_DATA = @"multipart/form-data";
 
+
 + (NSMutableDictionary<NSNumber *,ServiceWorkerRequest *> *) requestsById {
     if (_requestsById == nil) {
         _requestsById = [[NSMutableDictionary alloc] init];
@@ -87,6 +88,7 @@ NSString * const CONTENT_TYPE_FORM_DATA = @"multipart/form-data";
 @synthesize requestId = _requestId;
 @synthesize schemeTask = _schemeTask;
 @synthesize dataTask = _dataTask;
+@synthesize isBodyDecoded = _isBodyDecoded;
 
 - (NSMutableURLRequest *) outgoingRequest {
     NSString *scheme;
@@ -100,20 +102,26 @@ NSString * const CONTENT_TYPE_FORM_DATA = @"multipart/form-data";
             schemedURL = [_outgoingRequest URL];
             scheme = [schemedURL scheme];
             NSURL *outgoingURL;
-            if (![scheme isEqualToString:@"https"]) {
+            if (![scheme isEqualToString:@"https"] && ![scheme isEqualToString:@"http"]) {
                 outgoingURLString = [[schemedURL absoluteString] stringByReplacingOccurrencesOfString: scheme withString: @"https"];
                 outgoingURL = [NSURL URLWithString:outgoingURLString];
             } else {
                 outgoingURL= schemedURL;
             }
             [_outgoingRequest setURL:outgoingURL];
+            NSString *httpBodyAsString;
             if ([[_outgoingRequest HTTPMethod] isEqualToString: @"POST"]) {
                 NSString * contentType = [_outgoingRequest valueForHTTPHeaderField: CONTENT_TYPE_HEADER_KEY];
-                if ([self isBodyBase64EncodedForContentType: contentType]) {
+                if ([self isBodyBase64EncodedForContentType: contentType] && !_isBodyDecoded) {
                     NSData *decodedBody = [[NSData alloc] initWithBase64EncodedData:[_schemedRequest HTTPBody] options:NSDataBase64DecodingIgnoreUnknownCharacters];
+                    _isBodyDecoded = true;
+                    httpBodyAsString = [[NSString alloc] initWithData: decodedBody  encoding:NSUTF8StringEncoding];
                     if (decodedBody) {
                         [_outgoingRequest setHTTPBody:decodedBody];
                     }
+                } else {
+                    httpBodyAsString = [[NSString alloc] initWithData: [_schemedRequest HTTPBody] encoding:NSUTF8StringEncoding];
+                    [_outgoingRequest setHTTPBody:[_schemedRequest HTTPBody]];
                 }
             }
             [_outgoingRequest setCachePolicy:NSURLRequestReloadIgnoringLocalCacheData];
@@ -168,6 +176,7 @@ NSString * const CONTENT_TYPE_FORM_DATA = @"multipart/form-data";
     NSString *contentType = [headers valueForKey:CONTENT_TYPE_HEADER_KEY];
     NSString *boundary;
     NSData *httpBody;
+    NSString *httpBodyAsString;
     if ([body isKindOfClass:[NSDictionary class]]) {
         boundary = [self generateBoundaryString];
         if (contentType == nil) {
@@ -179,9 +188,11 @@ NSString * const CONTENT_TYPE_FORM_DATA = @"multipart/form-data";
         [headers setValue:contentType forKey:CONTENT_TYPE_HEADER_KEY];
     } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0 && [self isBodyBase64EncodedForContentType: contentType]) {
         httpBody = [[NSData alloc] initWithBase64EncodedString:(NSString*)body options:NSDataBase64DecodingIgnoreUnknownCharacters];
+        httpBodyAsString = [[NSString alloc] initWithData: httpBody encoding:NSUTF8StringEncoding];
     } else if ([body isKindOfClass:[NSString class]] && [(NSString*)body length] > 0) {
         httpBody = [(NSString *)body dataUsingEncoding:NSUTF8StringEncoding];
     }
+    _isBodyDecoded = true;
     [request setHTTPMethod:method];
     if (headers != nil) {
         for (NSString* key in headers) {
