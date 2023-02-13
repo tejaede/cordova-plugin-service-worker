@@ -493,7 +493,7 @@ Response.prototype.base64EncodedString = function () {
       url = prepareURL(requestOrURL);
       options = init || {};
     }
-    shouldSerializeBody = options.method === "POST" && !isBodyNativeFormData;
+    shouldSerializeBody = (options.method === "POST" || options.method === "PUT") && !isBodyNativeFormData;
 
     if (shouldSerializeBody) {
       return serializedBodyForRequest(requestOrURL).then(function (text) {
