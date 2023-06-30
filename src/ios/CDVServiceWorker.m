@@ -195,7 +195,13 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     }
     [config.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
     self.workerWebView = [[WKWebView alloc] initWithFrame: CGRectMake(0, 0, 0, 0) configuration: config]; // Headless
-    
+    if (@available(iOS 16.4, *)) {
+        BOOL allowWebviewInspection = NO;
+          #ifdef DEBUG
+            allowWebviewInspection = YES;
+          #endif
+        self.workerWebView.inspectable = allowWebviewInspection;
+    }
     [self registerForJavascriptMessages];
     [self.cacheApi registerForJavascriptMessagesForWebView:[self workerWebView]];
     

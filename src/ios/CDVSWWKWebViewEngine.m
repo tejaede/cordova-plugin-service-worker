@@ -27,6 +27,13 @@ NSString * const SW_DEFAULT_URL_SCHEME = @"cordova-sw";
     NSString *configuredURLScheme =  [settings objectForKey:@"serviceworkerurlscheme"];
     _swUrlScheme = configuredURLScheme != nil ? configuredURLScheme : SW_DEFAULT_URL_SCHEME;
     WKWebView* wkWebView = (WKWebView*)self.engineWebView;
+    if (@available(iOS 16.4, *)) {
+        BOOL allowWebviewInspection = NO;
+          #ifdef DEBUG
+            allowWebviewInspection = YES;
+          #endif
+        wkWebView.inspectable = allowWebviewInspection;
+    }
     [wkWebView setNavigationDelegate: self];
     [super pluginInitialize];
 }
