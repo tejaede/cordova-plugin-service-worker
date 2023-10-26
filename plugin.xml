@@ -6,7 +6,7 @@
     <keywords>cordova,serviceworker,service,worker</keywords>
 
     <engines>
-        <engine name="cordova-ios" version="^6.2.0" />
+        <engine name="cordova-ios" version=">=6.2.0" />
     </engines>
     <platform name="ios">
         <dependency id="es6-promise-plugin" url="https://github.com/vstirbu/PromisesPlugin.git" />
