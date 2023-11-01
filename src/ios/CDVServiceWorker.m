@@ -449,7 +449,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     NSURLRequest *request = [swRequest outgoingRequest];
     NSURL *url = [request URL];
     BOOL skipCache = [[[swRequest originalRequestDict] objectForKey: @"skipCache"] boolValue];
-    BOOL skipCacheAlt = [[swRequest originalRequestDict] valueForKey: @"skipCache"] == YES;
     BOOL canReadFromCache = internalCacheEnabled && !skipCache;
     
     if ([[request.URL absoluteString] containsString:@"/layer-service.js"]) {
@@ -457,7 +456,6 @@ SWScriptTemplate *resolvePolyfillIsReadyTemplate;
     }
     
     if (skipCache) {
-        skipCacheAlt;
         NSLog(@"handleTrueFetchScriptMessage SKIP CACHE %@", [url absoluteString]);
     }
     

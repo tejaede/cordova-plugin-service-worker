@@ -1,4 +1,5 @@
-if (typeof cordova === "undefined") { // SW-Only
+var isCordovaDefined = !!cordova; 
+if (!isCordovaDefined) { // SW-Only
 
   FetchEvent = function (eventInitDict) {
     Event.call(this, 'fetch');
@@ -181,7 +182,7 @@ if (typeof cordova === "undefined") { // SW-Only
     return url;
   };
   // This function returns a promise with a response for fetching the given resource.
-  function fetch(input, skipCache) {
+function swFetch(input, skipCache) {
     // Assume the passed in input is a resource URL string.
     // TODO: What should the default headers be?
     var inputIsRequest = input instanceof Request,
@@ -459,8 +460,12 @@ Response.prototype.base64EncodedString = function () {
         })
     }
   } 
+
+  var nativeFetch = window.fetch.bind(window);
+  var fetchFn = isCordovaDefined ? function (request, skipCache) {
+    return nativeFetch(request);
+  } : swFetch;
    
-  var originalFetch = window.fetch;
   window.fetch = function (requestOrURL, init) {
     var shouldSerializeBody = false,
       isBodyNativeFormData = false,
@@ -511,12 +516,14 @@ Response.prototype.base64EncodedString = function () {
           keepalive: options.keepalive,
           signal: options.signal
         };
-        return originalFetch.call(window, new Request(url, options), skipCache);
+        return fetchFn(new Request(url, options), skipCache);
       });
     } else {
-      return originalFetch.call(window, new Request(url, options), skipCache);
+      return fetchFn(new Request(url, options), skipCache);
     }
   };
+
+
 
   (function () {
     var proxied = window.XMLHttpRequest.prototype.open;
