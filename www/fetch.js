@@ -1,7 +1,7 @@
-var isCordovaDefined = !!cordova; 
+var isCordovaDefined = !!window.cordova;
 if (!isCordovaDefined) { // SW-Only
-
-  FetchEvent = function (eventInitDict) {
+  
+  var FetchEvent = function (eventInitDict) {
     Event.call(this, 'fetch');
     if (eventInitDict) {
       if (eventInitDict.id) {
@@ -465,7 +465,7 @@ Response.prototype.base64EncodedString = function () {
   var fetchFn = isCordovaDefined ? function (request, skipCache) {
     return nativeFetch(request);
   } : swFetch;
-   
+  var methodsWithSerializedBody = new Set(["POST", "PUT", "DELETE"]);
   window.fetch = function (requestOrURL, init) {
     var shouldSerializeBody = false,
       isBodyNativeFormData = false,
@@ -498,7 +498,7 @@ Response.prototype.base64EncodedString = function () {
       url = prepareURL(requestOrURL);
       options = init || {};
     }
-    shouldSerializeBody = (options.method === "POST" || options.method === "PUT") && !isBodyNativeFormData;
+    shouldSerializeBody = methodsWithSerializedBody.has(options.method) && !isBodyNativeFormData;
 
     if (shouldSerializeBody) {
       return serializedBodyForRequest(requestOrURL).then(function (text) {
