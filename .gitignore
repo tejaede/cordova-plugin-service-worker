@@ -1,1 +1,6 @@
 package-lock.json
+*.xcodeproj
+.idea
+.ignore.*
+.vscode
+atlassian-ide-plugin.xml
