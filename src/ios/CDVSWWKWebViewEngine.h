@@ -5,7 +5,7 @@
 //  Created by Thomas Jaede on 5/5/20.
 //
 
-#import "CDVWebViewEngine.h"
+#import "Cordova/CDVWebViewEngine.h"
 
 #ifndef CDVSWWKWebViewEngine_h
 #define CDVSWWKWebViewEngine_h
